@@ -11,6 +11,23 @@ st.set_page_config(
 
 st.title("📈 Baldi Market Scanner")
 
+aba_compra, aba_carteira = st.tabs(
+    [
+        "📈 Compras",
+        "💼 Carteira"
+    ]
+)
+
+with aba_compra:
+
+    tickers = [
+        "NVDA",
+        "MSFT",
+        "META"
+    ]
+
+    for ticker in tickers:
+
 tickers = [
     "NVDA",
     "MSFT",
@@ -170,3 +187,21 @@ for ticker in tickers:
         st.error(
             f"Erro carregando {ticker}: {erro}"
         )
+with aba_carteira:
+
+    st.header("💼 Minha Carteira")
+
+    arquivo = st.file_uploader(
+        "Upload CSV da Fidelity",
+        type=["csv"]
+    )
+
+    if arquivo is not None:
+
+        import pandas as pd
+
+        carteira = pd.read_csv(arquivo)
+
+        st.success("Arquivo carregado!")
+
+        st.dataframe(carteira)
