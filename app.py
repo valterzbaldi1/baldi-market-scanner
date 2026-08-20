@@ -61,12 +61,11 @@ else:
 
             url = noticia["content"]["clickThroughUrl"]["url"]
 
-            st.markdown(
-                f"**{titulo}**"
-            )
+            st.markdown(f"• {titulo}")
 
             st.markdown(
-                f"{url}"
+                f'{url}>',
+                unsafe_allow_html=True
             )
 
             st.write("")
