@@ -64,7 +64,7 @@ else:
             st.markdown(f"• {titulo}")
 
             st.markdown(
-                f'🔗 Abrir</a>',
+                f'{url}🔗 Abrir</a>',
                 unsafe_allow_html=True
             )
 
