@@ -51,7 +51,7 @@ for ticker in tickers:
         1
     )
 
-    col1, col2 = st.columns([1, 2])
+    col1, col2 = st.columns([0.5, 2.5])
 
     with col1:
 
@@ -85,34 +85,34 @@ for ticker in tickers:
 
         st.line_chart(close)
 
-    st.markdown("### 📰 Notícias")
+        st.markdown("### 📰 Notícias")
 
-    noticias = obter_noticias(ticker)
+        noticias = obter_noticias(ticker)
 
-    if len(noticias) == 0:
+        if len(noticias) == 0:
 
-        st.info("NO NEWS")
+            st.info("NO NEWS")
 
-    else:
+        else:
 
-        contador = 0
+            contador = 0
 
-        for noticia in noticias:
+            for noticia in noticias:
 
-            try:
+                try:
 
-                titulo = noticia["content"]["title"]
+                    titulo = noticia["content"]["title"]
 
-                if len(titulo) > 60:
-                    titulo = titulo[:60] + "..."
+                    if len(titulo) > 50:
+                        titulo = titulo[:50] + "..."
 
-                st.write("• " + titulo)
+                    st.write("• " + titulo)
 
-                contador += 1
+                    contador += 1
 
-                if contador >= 3:
-                    break
+                    if contador >= 3:
+                        break
 
-            except:
+                except:
 
-                pass
+                    pass
