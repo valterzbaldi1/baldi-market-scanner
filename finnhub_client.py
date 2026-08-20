@@ -18,7 +18,7 @@ def obter_preco(ticker):
 
     dados = resposta.json()
 
-    return dados["c"]
+    return dados.get("c", 0)
 
 
 def obter_historico(ticker):
@@ -44,7 +44,10 @@ def obter_historico(ticker):
 
     dados = resposta.json()
 
-    if dados["s"] != "ok":
+    # DEBUG
+    print(dados)
+
+    if "c" not in dados:
         return None
 
     return pd.DataFrame({
