@@ -42,8 +42,6 @@ st.write(f"📉 Distância da Máxima: {distancia_maxima}%")
 
 st.subheader("📰 Últimas Notícias")
 
-st.subheader("📰 Últimas Notícias")
-
 noticias = obter_noticias(ticker)
 
 if len(noticias) == 0:
@@ -58,11 +56,13 @@ else:
 
             titulo = noticia["content"]["title"]
 
-            link = noticia["content"]["canonicalUrl"]["url"]
+            url = noticia["content"]["clickThroughUrl"]["url"]
 
             st.markdown(
-                f"[{titulo}]({        )
+                f"- {url}"
+            )
 
         except:
 
             pass
+`
