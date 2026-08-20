@@ -1,11 +1,18 @@
 import streamlit as st
 
-from market_live import obter_preco
+from finnhub_client import obter_preco
 
-st.title("📈 Teste Yahoo Finance")
+st.title("📈 Teste Finnhub")
 
-preco_nvda = obter_preco("NVDA")
+tickers = [
+    "NVDA",
+    "MSFT",
+    "META",
+    "AMZN"
+]
 
-st.write("NVDA")
+for ticker in tickers:
 
-st.write(preco_nvda)
+    preco = obter_preco(ticker)
+
+    st.write(f"{ticker} → ${preco}")
