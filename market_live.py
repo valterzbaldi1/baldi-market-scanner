@@ -1,20 +1,22 @@
 import yfinance as yf
 
-def obter_dados(ticker):
-
-    ativo = yf.Ticker(ticker)
-
-    info = ativo.info
+def obter_preco(ticker):
 
     try:
-        return {
-            "ticker": ticker,
-            "preco": info.get("currentPrice", 0),
-            "yield": info.get("dividendYield", 0)
-        }
+
+        dados = yf.download(
+            ticker,
+            period="5d",
+            progress=False
+        )
+
+        preco = round(
+            float(dados["Close"].iloc[-1]),
+            2
+        )
+
+        return preco
+
     except:
-        return {
-            "ticker": ticker,
-            "preco": 0,
-            "yield": 0
-        }
+
+        return "Erro"
