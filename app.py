@@ -68,7 +68,7 @@ else:
 
             st.markdown(f"• {titulo}")
 
-            st.markdown(f"[{url")
+            st.markdown(f"[{url}")
 
             st.write("")
 
