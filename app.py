@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 
 st.set_page_config(
     page_title="Baldi Market Scanner",
@@ -9,12 +10,12 @@ st.title("📈 Baldi Market Scanner")
 
 st.subheader("Top Compras")
 
-st.write("1. SCHG")
-st.write("2. NVDA")
-st.write("3. META")
+market = pd.read_csv("market_data.csv")
+
+st.dataframe(market)
 
 st.subheader("Minha Carteira")
 
-st.write("MAIN → COMPRAR MAIS")
-st.write("JEPI → MANTER")
-st.write("O → MANTER")
+portfolio = pd.read_csv("portfolio.csv")
+
+st.dataframe(portfolio)
