@@ -1,19 +1,26 @@
 import streamlit as st
-import requests
+import yfinance as yf
 
-api_key = st.secrets["FINNHUB_API_KEY"]
+st.title("📈 Teste Histórico Yahoo")
 
-url = (
-    f"https://finnhub.io/api/v1/stock/candle"
-    f"?symbol=NVDA"
-    f"&resolution=D"
-    f"&from=1700000000"
-    f"&to=1800000000"
-    f"&token={api_key}"
-)
+ticker = "NVDA"
 
-resposta = requests.get(url)
+try:
 
-st.title("Diagnóstico Finnhub")
+    dados = yf.download(
+        ticker,
+        period="6mo",
+        progress=False
+    )
 
-st.json(resposta.json())
+    st.success(
+        f"{len(dados)} dias carregados."
+    )
+
+    st.line_chart(
+        dados["Close"]
+    )
+
+except Exception as erro:
+
+    st.error(str(erro))
