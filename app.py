@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 
+from rules.buy_rules import calcula_score_compra
+from recommendation import recomendacao
+
 st.set_page_config(
     page_title="Baldi Market Scanner",
     layout="wide"
@@ -9,51 +12,63 @@ st.set_page_config(
 market = pd.read_csv("market_data.csv")
 portfolio = pd.read_csv("portfolio.csv")
 
+compras = []
+
+for _, linha in market.iterrows():
+
+    score, motivos = calcula_score_compra(
+        float(linha["RSI"]),
+        float(linha["Yield"]),
+        float(linha["DistanciaMaxima"])
+    )
+
+    compras.append({
+        "ticker": linha["Ticker"],
+        "score": score,
+        "motivos": motivos,
+        "recomendacao": recomendacao(score),
+        "rsi": linha["RSI"],
+        "yield": linha["Yield"],
+        "distancia": linha["DistanciaMaxima"],
+        "lucro": linha["Lucro"]
+    })
+
+compras = sorted(
+    compras,
+    key=lambda x: x["score"],
+    reverse=True
+)
+
 st.title("📈 Baldi Market Scanner")
 
-col1, col2 = st.columns(2)
+col1, col2 = st.columns([2,1])
 
 with col1:
 
     st.subheader("🔥 Top Compras")
 
-    market = market.sort_values(
-        by=["RSI"],
-        ascending=True
-    )
+    ranking = 1
 
-    for _, linha in market.head(5).iterrows():
+    for acao in compras[:5]:
 
         st.markdown(
             f"""
-### {linha['Ticker']}
+### #{ranking} - {acao['ticker']}
 
-📈 RSI: {linha['RSI']} pts
+🎯 **Score:** {acao['score']}/100
 
-💰 Yield: {linha['Yield']}%
+✅ **Recomendação:** {acao['recomendacao']}
 
-📉 Distância da Máxima: {linha['DistanciaMaxima']}%
+📈 RSI: {acao['rsi']} pts
 
-✅ Lucro: {linha['Lucro']}%
+💰 Yield: {acao['yield']}%
 
----
+📉 Distância da Máxima: {acao['distancia']}%
+
+💵 Lucro Atual: {acao['lucro']}%
+
+**Motivos:**
 """
         )
 
-with col2:
-
-    st.subheader("💼 Minha Carteira")
-
-    for _, linha in portfolio.iterrows():
-
-        st.markdown(
-            f"""
-### {linha['Ticker']}
-
-📦 Quantidade: {linha['Quantidade']} ações
-
-💵 Custo Médio: ${linha['CustoMedio']}
-
----
-"""
-        )
+        for motivo in acao["motivos
