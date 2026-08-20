@@ -185,4 +185,67 @@ with aba_compra:
 
                             if len(titulo) > 45:
                                 titulo = (
-                              
+                                    titulo[:45]
+                                    + "..."
+                                )
+
+                            st.write(
+                                "• " + titulo
+                            )
+
+                            contador += 1
+
+                            if contador >= 3:
+                                break
+
+                        except:
+
+                            pass
+
+        except Exception as erro:
+
+            st.error(
+                f"Erro carregando {ticker}: {erro}"
+            )
+
+# ==================================================
+# ABA CARTEIRA
+# ==================================================
+
+with aba_carteira:
+
+    st.header("💼 Minha Carteira")
+
+    arquivo = st.file_uploader(
+        "Upload CSV da Fidelity",
+        type=["csv"]
+    )
+
+    if arquivo is not None:
+
+        try:
+
+            carteira = pd.read_csv(
+                arquivo,
+                skiprows=1
+            )
+
+            st.success(
+                "CSV Fidelity carregado"
+            )
+
+            st.dataframe(
+                carteira
+            )
+
+        except Exception as erro:
+
+            st.error(
+                f"Erro lendo CSV: {erro}"
+            )
+
+    else:
+
+        st.info(
+            "Faça upload do CSV exportado pela Fidelity."
+        )
