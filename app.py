@@ -6,16 +6,55 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📈 Baldi Market Scanner")
-
-st.subheader("Top Compras")
-
 market = pd.read_csv("market_data.csv")
-
-st.dataframe(market)
-
-st.subheader("Minha Carteira")
-
 portfolio = pd.read_csv("portfolio.csv")
 
-st.dataframe(portfolio)
+st.title("📈 Baldi Market Scanner")
+
+col1, col2 = st.columns(2)
+
+with col1:
+
+    st.subheader("🔥 Top Compras")
+
+    market = market.sort_values(
+        by=["RSI"],
+        ascending=True
+    )
+
+    for _, linha in market.head(5).iterrows():
+
+        st.markdown(
+            f"""
+### {linha['Ticker']}
+
+📈 RSI: {linha['RSI']} pts
+
+💰 Yield: {linha['Yield']}%
+
+📉 Distância da Máxima: {linha['DistanciaMaxima']}%
+
+✅ Lucro: {linha['Lucro']}%
+
+---
+"""
+        )
+
+with col2:
+
+    st.subheader("💼 Minha Carteira")
+
+    for _, linha in portfolio.iterrows():
+
+        st.markdown(
+            f"""
+### {linha['Ticker']}
+
+📦 Quantidade: {linha['Quantidade']} ações
+
+💵 Custo Médio: ${linha['CustoMedio']}
+
+---
+"""
+        )
+``
