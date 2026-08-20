@@ -40,46 +40,12 @@ st.write(f"📉 Mínima 6 meses: ${minima}")
 st.write(f"📊 Média 6 meses: ${media}")
 st.write(f"📉 Distância da Máxima: {distancia_maxima}%")
 
-if rsi < 40 and distancia_maxima <= -10:
-    st.success("🟢 COMPRAR")
-
-elif rsi > 70:
-    st.error("🔴 NÃO COMPRAR")
-
-else:
-    st.warning("🟨 DÚVIDA")
-
 st.subheader("📰 Últimas Notícias")
 
 noticias = obter_noticias(ticker)
 
-if len(noticias) == 0:
+st.write("Quantidade encontrada:", len(noticias))
 
-    st.info("NO NEWS")
-
-else:
-
-    for noticia in noticias:
-
-        try:
-
-            titulo = noticia["title"]
-
-            st.markdown(
-                f"• {titulo}"
-            )
-
-        except:
-
-            pass
-
-    try:
-        titulo = noticia["title"]
-        link = noticia["link"]
-
-        st.markdown(f"- {link}")
-
-    except:
-        pass
+st.json(noticias[:1])
 
 st.line_chart(close)
