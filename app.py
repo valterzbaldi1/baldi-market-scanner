@@ -71,4 +71,4 @@ with col1:
 """
         )
 
-        for motivo in acao["motivos"]:
+        for motivo in acao["motivo"]:
