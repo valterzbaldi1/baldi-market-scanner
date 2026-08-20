@@ -36,8 +36,6 @@ for ticker in tickers:
             2
         )
 
-        rsi = calcular_rsi(close)
-
         maxima = round(
             float(close.max()),
             2
@@ -47,6 +45,13 @@ for ticker in tickers:
             float(close.min()),
             2
         )
+
+        media = round(
+            float(close.mean()),
+            2
+        )
+
+        rsi = calcular_rsi(close)
 
         distancia_maxima = round(
             ((preco_atual - maxima) / maxima) * 100,
@@ -64,15 +69,21 @@ for ticker in tickers:
 
         col1, col2, col3 = st.columns([1, 3, 1.5])
 
-        # =====================
+        # ==========================
         # INDICADORES
-        # =====================
+        # ==========================
 
         with col1:
 
             st.subheader(ticker)
 
-            st.write(f"💵 ${preco_atual}")
+            st.write(f"💵 Atual: ${preco_atual}")
+
+            st.write(f"🏔️ Max: ${maxima}")
+
+            st.write(f"📉 Min: ${minima}")
+
+            st.write(f"📊 Média: ${media}")
 
             st.write(f"📈 RSI: {rsi}")
 
@@ -96,17 +107,17 @@ for ticker in tickers:
 
                 st.warning("🟨 DÚVIDA")
 
-        # =====================
+        # ==========================
         # GRÁFICO
-        # =====================
+        # ==========================
 
         with col2:
 
             st.line_chart(close)
 
-        # =====================
+        # ==========================
         # NOTÍCIAS
-        # =====================
+        # ==========================
 
         with col3:
 
@@ -128,10 +139,22 @@ for ticker in tickers:
 
                         titulo = noticia["content"]["title"]
 
-                        if len(titulo) > 40:
-                            titulo = titulo[:40] + "..."
+                        if len(titulo) > 45:
+                            titulo = titulo[:45] + "..."
 
                         st.write("• " + titulo)
+
+                        try:
+
+                            url = noticia["content"]["clickThroughUrl"]["url"]
+
+                            st.markdown(
+                                f"{url}"
+                            )
+
+                        except:
+
+                            pass
 
                         contador += 1
 
