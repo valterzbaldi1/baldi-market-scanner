@@ -40,6 +40,9 @@ st.write(f"📉 Mínima 6 meses: ${minima}")
 st.write(f"📊 Média 6 meses: ${media}")
 st.write(f"📉 Distância da Máxima: {distancia_maxima}%")
 
+st.subheader("📊 Histórico de Preços")
+
+st.line_chart(close)
 st.subheader("📰 Últimas Notícias")
 
 noticias = obter_noticias(ticker)
@@ -59,12 +62,15 @@ else:
             url = noticia["content"]["clickThroughUrl"]["url"]
 
             st.markdown(
-                f"- {url}"
+                f"**{titulo}**"
             )
+
+            st.markdown(
+                f"{url}"
+            )
+
+            st.write("")
 
         except:
 
             pass
-st.subheader("📊 Histórico de Preços")
-
-st.line_chart(close)
