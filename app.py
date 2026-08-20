@@ -42,10 +42,27 @@ st.write(f"📉 Distância da Máxima: {distancia_maxima}%")
 
 st.subheader("📰 Últimas Notícias")
 
+st.subheader("📰 Últimas Notícias")
+
 noticias = obter_noticias(ticker)
 
-st.write("Quantidade encontrada:", len(noticias))
+if len(noticias) == 0:
 
-st.json(noticias[:1])
+    st.info("NO NEWS")
 
-st.line_chart(close)
+else:
+
+    for noticia in noticias:
+
+        try:
+
+            titulo = noticia["content"]["title"]
+
+            link = noticia["content"]["canonicalUrl"]["url"]
+
+            st.markdown(
+                f"[{titulo}]({        )
+
+        except:
+
+            pass
