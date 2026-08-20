@@ -1,5 +1,6 @@
 import streamlit as st
 import yfinance as yf
+import pandas as pd
 
 from indicators import calcular_rsi
 from news import obter_noticias
@@ -18,6 +19,10 @@ aba_compra, aba_carteira = st.tabs(
     ]
 )
 
+# ==================================================
+# ABA COMPRAS
+# ==================================================
+
 with aba_compra:
 
     tickers = [
@@ -28,180 +33,156 @@ with aba_compra:
 
     for ticker in tickers:
 
-tickers = [
-    "NVDA",
-    "MSFT",
-    "META"
-]
+        st.divider()
 
-for ticker in tickers:
+        try:
 
-    st.divider()
-
-    try:
-
-        dados = yf.download(
-            ticker,
-            period="6mo",
-            progress=False
-        )
-
-        close = dados["Close"][ticker]
-
-        preco_atual = round(
-            float(close.iloc[-1]),
-            2
-        )
-
-        maxima = round(
-            float(close.max()),
-            2
-        )
-
-        minima = round(
-            float(close.min()),
-            2
-        )
-
-        media = round(
-            float(close.mean()),
-            2
-        )
-
-        rsi = calcular_rsi(close)
-
-        distancia_maxima = round(
-            ((preco_atual - maxima) / maxima) * 100,
-            2
-        )
-
-        posicao_historica = round(
-            (
-                (preco_atual - minima)
-                /
-                (maxima - minima)
-            ) * 100,
-            1
-        )
-
-        col1, col2, col3 = st.columns([1, 3, 1.5])
-
-        # ==========================
-        # INDICADORES
-        # ==========================
-
-        with col1:
-
-            st.subheader(ticker)
-
-            st.write(f"💵 Atual: ${preco_atual}")
-
-            st.write(f"🏔️ Max: ${maxima}")
-
-            st.write(f"📉 Min: ${minima}")
-
-            st.write(f"📊 Média: ${media}")
-
-            st.write(f"📈 RSI: {rsi}")
-
-            st.write(
-                f"📍 Posição: {posicao_historica}%"
+            dados = yf.download(
+                ticker,
+                period="6mo",
+                progress=False
             )
 
-            st.write(
-                f"📉 Dist. Máx: {distancia_maxima}%"
+            close = dados["Close"][ticker]
+
+            preco_atual = round(
+                float(close.iloc[-1]),
+                2
             )
 
-            if rsi < 40 and posicao_historica < 40:
+            maxima = round(
+                float(close.max()),
+                2
+            )
 
-                st.success("🟢 COMPRAR")
+            minima = round(
+                float(close.min()),
+                2
+            )
 
-            elif rsi > 70 or posicao_historica > 80:
+            media = round(
+                float(close.mean()),
+                2
+            )
 
-                st.error("🔴 NÃO COMPRAR")
+            rsi = calcular_rsi(close)
 
-            else:
+            distancia_maxima = round(
+                ((preco_atual - maxima) / maxima) * 100,
+                2
+            )
 
-                st.warning("🟨 DÚVIDA")
+            posicao_historica = round(
+                (
+                    (preco_atual - minima)
+                    /
+                    (maxima - minima)
+                ) * 100,
+                1
+            )
 
-        # ==========================
-        # GRÁFICO
-        # ==========================
+            col1, col2, col3 = st.columns(
+                [1, 3, 1.5]
+            )
 
-        with col2:
+            # ==========================
+            # INDICADORES
+            # ==========================
 
-            st.line_chart(close)
+            with col1:
 
-        # ==========================
-        # NOTÍCIAS
-        # ==========================
+                st.subheader(ticker)
 
-        with col3:
+                st.write(
+                    f"💵 Atual: ${preco_atual}"
+                )
 
-            st.markdown("### 📰 Notícias")
+                st.write(
+                    f"🏔️ Max: ${maxima}"
+                )
 
-            noticias = obter_noticias(ticker)
+                st.write(
+                    f"📉 Min: ${minima}"
+                )
 
-            if len(noticias) == 0:
+                st.write(
+                    f"📊 Média: ${media}"
+                )
 
-                st.info("NO NEWS")
+                st.write(
+                    f"📈 RSI: {rsi}"
+                )
 
-            else:
+                st.write(
+                    f"📍 Posição: {posicao_historica}%"
+                )
 
-                contador = 0
+                st.write(
+                    f"📉 Dist. Máx: {distancia_maxima}%"
+                )
 
-                for noticia in noticias:
+                if (
+                    rsi < 40
+                    and posicao_historica < 40
+                ):
 
-                    try:
+                    st.success(
+                        "🟢 COMPRAR"
+                    )
 
-                        titulo = noticia["content"]["title"]
+                elif (
+                    rsi > 70
+                    or posicao_historica > 80
+                ):
 
-                        if len(titulo) > 45:
-                            titulo = titulo[:45] + "..."
+                    st.error(
+                        "🔴 NÃO COMPRAR"
+                    )
 
-                        st.write("• " + titulo)
+                else:
+
+                    st.warning(
+                        "🟨 DÚVIDA"
+                    )
+
+            # ==========================
+            # GRÁFICO
+            # ==========================
+
+            with col2:
+
+                st.line_chart(close)
+
+            # ==========================
+            # NOTÍCIAS
+            # ==========================
+
+            with col3:
+
+                st.markdown(
+                    "### 📰 Notícias"
+                )
+
+                noticias = obter_noticias(
+                    ticker
+                )
+
+                if len(noticias) == 0:
+
+                    st.info("NO NEWS")
+
+                else:
+
+                    contador = 0
+
+                    for noticia in noticias:
 
                         try:
 
-                            url = noticia["content"]["clickThroughUrl"]["url"]
+                            titulo = noticia[
+                                "content"
+                            ]["title"]
 
-                            st.markdown(
-                                f"{url}"
-                            )
-
-                        except:
-
-                            pass
-
-                        contador += 1
-
-                        if contador >= 3:
-                            break
-
-                    except:
-
-                        pass
-
-    except Exception as erro:
-
-        st.error(
-            f"Erro carregando {ticker}: {erro}"
-        )
-with aba_carteira:
-
-    st.header("💼 Minha Carteira")
-
-    arquivo = st.file_uploader(
-        "Upload CSV da Fidelity",
-        type=["csv"]
-    )
-
-    if arquivo is not None:
-
-        import pandas as pd
-
-        carteira = pd.read_csv(arquivo)
-
-        st.success("Arquivo carregado!")
-
-        st.dataframe(carteira)
+                            if len(titulo) > 45:
+                                titulo = (
+                              
