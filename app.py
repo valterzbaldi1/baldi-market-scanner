@@ -4,74 +4,115 @@ import yfinance as yf
 from indicators import calcular_rsi
 from news import obter_noticias
 
+st.set_page_config(
+    page_title="Baldi Market Scanner",
+    layout="wide"
+)
+
 st.title("📈 Baldi Market Scanner")
 
-ticker = "NVDA"
+tickers = [
+    "NVDA",
+    "MSFT",
+    "META"
+]
 
-dados = yf.download(
-    ticker,
-    period="6mo",
-    progress=False
-)
+for ticker in tickers:
 
-close = dados["Close"][ticker]
+    st.divider()
 
-preco_atual = round(float(close.iloc[-1]), 2)
+    dados = yf.download(
+        ticker,
+        period="6mo",
+        progress=False
+    )
 
-rsi = calcular_rsi(close)
+    close = dados["Close"][ticker]
 
-maxima = round(float(close.max()), 2)
+    preco_atual = round(float(close.iloc[-1]), 2)
 
-minima = round(float(close.min()), 2)
+    rsi = calcular_rsi(close)
 
-media = round(float(close.mean()), 2)
+    maxima = round(float(close.max()), 2)
 
-distancia_maxima = round(
-    ((preco_atual - maxima) / maxima) * 100,
-    2
-)
+    minima = round(float(close.min()), 2)
 
-st.subheader(ticker)
+    distancia_maxima = round(
+        ((preco_atual - maxima) / maxima) * 100,
+        2
+    )
 
-st.write(f"💵 Preço Atual: ${preco_atual}")
-st.write(f"📈 RSI: {rsi}")
-st.write(f"🏔️ Máxima 6 meses: ${maxima}")
-st.write(f"📉 Mínima 6 meses: ${minima}")
-st.write(f"📊 Média 6 meses: ${media}")
-st.write(f"📉 Distância da Máxima: {distancia_maxima}%")
+    posicao_historica = round(
+        (
+            (preco_atual - minima)
+            /
+            (maxima - minima)
+        ) * 100,
+        1
+    )
 
-st.subheader("📊 Histórico de Preços")
+    col1, col2 = st.columns([1, 2])
 
-st.line_chart(close)
-st.subheader("📰 Últimas Notícias")
+    with col1:
 
-noticias = obter_noticias(ticker)
+        st.subheader(ticker)
 
-if len(noticias) == 0:
+        st.write(f"💵 ${preco_atual}")
 
-    st.info("NO NEWS")
+        st.write(f"📈 RSI: {rsi}")
 
-else:
+        st.write(
+            f"📍 Posição: {posicao_historica}%"
+        )
 
-    for noticia in noticias:
+        st.write(
+            f"📉 Dist. Máx: {distancia_maxima}%"
+        )
 
-        try:
+        if rsi < 40 and posicao_historica < 40:
 
-            titulo = noticia["content"]["title"]
+            st.success("🟢 COMPRAR")
 
-            url = noticia["content"]["clickThroughUrl"]["url"]
+        elif rsi > 70 or posicao_historica > 80:
 
-            if len(url) > 20:
-                url_curta = url[:20] + "..."
-            else:
-                url_curta = url
+            st.error("🔴 NÃO COMPRAR")
 
-            st.markdown(f"• {titulo}")
+        else:
 
-            st.markdown(f"[{url}")
+            st.warning("🟨 DÚVIDA")
 
-            st.write("")
+    with col2:
 
-        except:
+        st.line_chart(close)
 
-            pass
+    st.markdown("### 📰 Notícias")
+
+    noticias = obter_noticias(ticker)
+
+    if len(noticias) == 0:
+
+        st.info("NO NEWS")
+
+    else:
+
+        contador = 0
+
+        for noticia in noticias:
+
+            try:
+
+                titulo = noticia["content"]["title"]
+
+                if len(titulo) > 60:
+                    titulo = titulo[:60] + "..."
+
+                st.write("• " + titulo)
+
+                contador += 1
+
+                if contador >= 3:
+                    break
+
+            except:
+
+                pass
