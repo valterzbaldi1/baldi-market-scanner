@@ -9,16 +9,20 @@ ticker = "NVDA"
 
 preco = obter_preco(ticker)
 
-historico = obter_historico(ticker)
-
 st.subheader(ticker)
 
 st.write(f"Preço Atual: ${preco}")
 
-if historico is not None:
+historico = obter_historico(ticker)
 
-    st.write(
-        f"Dias carregados: {len(historico)}"
+if historico is None:
+
+    st.error("Histórico não retornado pelo Finnhub.")
+
+else:
+
+    st.success(
+        f"{len(historico)} dias carregados."
     )
 
     st.line_chart(
