@@ -9,7 +9,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📈 Baldi Market Scanner")
+st.title("📈 Diagnóstico")
 
 tickers = [
     "NVDA",
@@ -21,49 +21,36 @@ for ticker in tickers:
 
     st.divider()
 
+    st.write("Processando:", ticker)
+
     dados = yf.download(
         ticker,
         period="6mo",
         progress=False
     )
 
-    close = dados["Close"][ticker]
+    st.write("Linhas carregadas:", len(dados))
 
-    preco_atual = round(
-        float(close.iloc[-1]),
-        2
-    )
+    st.write("Colunas:")
+    st.write(dados.columns)
 
-    rsi = calcular_rsi(close)
+    st.write("Primeiras linhas:")
+    st.dataframe(dados.head())
 
-    maxima = round(
-        float(close.max()),
-        2
-    )
+    try:
 
-    minima = round(
-        float(close.min()),
-        2
-    )
+        close = dados["Close"][ticker]
 
-    distancia_maxima = round(
-        ((preco_atual - maxima) / maxima) * 100,
-        2
-    )
+        st.success("Close encontrado")
 
-    posicao_historica = round(
-        (
-            (preco_atual - minima)
-            /
-            (maxima - minima)
-        ) * 100,
-        1
-    )
+        st.write("Último preço:")
 
-    col1, col2, col3 = st.columns([0.8, 2.3, 1.1])
+        st.write(close.iloc[-1])
 
-    with col1:
+    except Exception as erro:
 
-        st.subheader(ticker)
+        st.error(str(erro))
 
-      
+        continue
+
+    st.write("----------------------------")
