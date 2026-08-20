@@ -61,11 +61,13 @@ else:
 
             url = noticia["content"]["clickThroughUrl"]["url"]
 
+            if len(titulo) > 20:
+                titulo = titulo[:20] + "..."
+
             st.markdown(f"• {titulo}")
 
             st.markdown(
-                f'{url}',
-                unsafe_allow_html=True
+                f'<a href="{url}" target="_blank">🔗 ow_html=True
             )
 
             st.write("")
