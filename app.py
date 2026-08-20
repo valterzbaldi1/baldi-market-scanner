@@ -65,3 +65,6 @@ else:
         except:
 
             pass
+st.subheader("📊 Histórico de Preços")
+
+st.line_chart(close)
