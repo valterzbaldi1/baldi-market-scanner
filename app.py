@@ -53,7 +53,25 @@ st.subheader("📰 Últimas Notícias")
 
 noticias = obter_noticias(ticker)
 
-for noticia in noticias:
+if len(noticias) == 0:
+
+    st.info("NO NEWS")
+
+else:
+
+    for noticia in noticias:
+
+        try:
+
+            titulo = noticia["title"]
+
+            st.markdown(
+                f"• {titulo}"
+            )
+
+        except:
+
+            pass
 
     try:
         titulo = noticia["title"]
