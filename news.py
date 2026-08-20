@@ -9,6 +9,9 @@ def obter_noticias(ticker):
 
         noticias = ativo.news
 
+        if noticias is None:
+            return []
+
         return noticias[:5]
 
     except:
