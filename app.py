@@ -1,30 +1,19 @@
 import streamlit as st
+import requests
 
-from finnhub_client import obter_preco
-from finnhub_client import obter_historico
+api_key = st.secrets["FINNHUB_API_KEY"]
 
-st.title("📈 Baldi Market Scanner")
+url = (
+    f"https://finnhub.io/api/v1/stock/candle"
+    f"?symbol=NVDA"
+    f"&resolution=D"
+    f"&from=1700000000"
+    f"&to=1800000000"
+    f"&token={api_key}"
+)
 
-ticker = "NVDA"
+resposta = requests.get(url)
 
-preco = obter_preco(ticker)
+st.title("Diagnóstico Finnhub")
 
-st.subheader(ticker)
-
-st.write(f"Preço Atual: ${preco}")
-
-historico = obter_historico(ticker)
-
-if historico is None:
-
-    st.error("Histórico não retornado pelo Finnhub.")
-
-else:
-
-    st.success(
-        f"{len(historico)} dias carregados."
-    )
-
-    st.line_chart(
-        historico["close"]
-    )
+st.json(resposta.json())
