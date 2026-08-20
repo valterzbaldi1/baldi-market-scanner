@@ -41,7 +41,7 @@ compras = sorted(
 
 st.title("📈 Baldi Market Scanner")
 
-col1, col2 = st.columns([2,1])
+col1, col2 = st.columns([2, 1])
 
 with col1:
 
@@ -59,16 +59,39 @@ with col1:
 
 ✅ **Recomendação:** {acao['recomendacao']}
 
-📈 RSI: {acao['rsi']} pts
+📈 **RSI:** {acao['rsi']} pts
 
-💰 Yield: {acao['yield']}%
+💰 **Yield:** {acao['yield']}%
 
-📉 Distância da Máxima: {acao['distancia']}%
+📉 **Distância da Máxima:** {acao['distancia']}%
 
-💵 Lucro Atual: {acao['lucro']}%
-
-**Motivos:**
+💵 **Lucro Atual:** {acao['lucro']}%
 """
         )
 
-        for motivos in acao["motivos"]:
+        st.markdown("**Motivos:**")
+
+        for motivo in acao["motivos"]:
+            st.write(motivo)
+
+        st.divider()
+
+        ranking += 1
+
+with col2:
+
+    st.subheader("💼 Minha Carteira")
+
+    for _, linha in portfolio.iterrows():
+
+        st.markdown(
+            f"""
+### {linha['Ticker']}
+
+📦 **Quantidade:** {linha['Quantidade']} ações
+
+💵 **Custo Médio:** ${linha['CustoMedio']}
+"""
+        )
+
+        st.divider()
