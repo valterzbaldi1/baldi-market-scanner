@@ -14,6 +14,9 @@ from news import obter_noticias
 st.set_page_config(page_title="Baldi Market Scanner", layout="wide")
 st.title("📈 Baldi Market Scanner")
 
+# ==================================================
+# UTILIDADES
+# ==================================================
 
 def numero(valor):
     if pd.isna(valor):
@@ -62,8 +65,13 @@ def calcular_indicadores(close):
     mm20 = float(close.rolling(20).mean().iloc[-1]) if len(close) >= 20 else media
     mm50 = float(close.rolling(50).mean().iloc[-1]) if len(close) >= 50 else media
     return {
-        "atual": atual, "maxima": maxima, "minima": minima, "media": media,
-        "rsi": rsi, "distancia": distancia, "posicao": posicao,
+        "atual": atual,
+        "maxima": maxima,
+        "minima": minima,
+        "media": media,
+        "rsi": rsi,
+        "distancia": distancia,
+        "posicao": posicao,
         "tendencia_alta": atual > mm20 > mm50
     }
 
@@ -109,6 +117,10 @@ def mostrar_noticias(ticker):
     if exibidas == 0:
         st.info("NO NEWS")
 
+
+# ==================================================
+# LEITURA DOS CSVs DA FIDELITY
+# ==================================================
 
 def ler_positions(arquivo):
     linhas = list(csv.reader(io.StringIO(texto_upload(arquivo))))
@@ -266,19 +278,33 @@ def calcular_performance_mensal(evolucao, aportes, dividendos, taxa_fia_anual):
     return pd.DataFrame(linhas)
 
 
+# ==================================================
+# GRAFICO GERAL + TABELA MENSAL ALINHADA
+# ==================================================
+
 def grafico_e_tabela(evolucao, quantidades, mensal):
     if mensal.empty:
         return None
 
     meses = mensal["MesData"].tolist()
     rotulos = mensal["Mes"].tolist()
-    barras = quantidades.reindex(meses, method="ffill").fillna(0)
+    # Pontos mensais para garantir alinhamento exato com a tabela.
+    fechamento = evolucao.reindex(
+        [data + pd.offsets.MonthEnd(0) for data in meses],
+        method="ffill"
+    )
+    fechamento.index = meses
+    barras = quantidades.reindex(
+        [data + pd.offsets.MonthEnd(0) for data in meses],
+        method="ffill"
+    ).fillna(0)
+    barras.index = meses
 
     fig = make_subplots(
         rows=2,
         cols=1,
-        row_heights=[0.66, 0.34],
-        vertical_spacing=0.025,
+        row_heights=[0.65, 0.35],
+        vertical_spacing=0.02,
         specs=[[{"secondary_y": True}], [{"type": "table"}]]
     )
 
@@ -289,10 +315,10 @@ def grafico_e_tabela(evolucao, quantidades, mensal):
     ]:
         fig.add_trace(
             go.Scatter(
-                x=evolucao.index,
-                y=evolucao[nome],
+                x=rotulos,
+                y=fechamento[nome],
                 name=nome,
-                mode="lines",
+                mode="lines+markers",
                 line=dict(color=cor, width=3)
             ),
             row=1, col=1, secondary_y=False
@@ -302,7 +328,7 @@ def grafico_e_tabela(evolucao, quantidades, mensal):
     for i, ticker in enumerate(barras.columns):
         fig.add_trace(
             go.Bar(
-                x=meses,
+                x=rotulos,
                 y=barras[ticker],
                 name=ticker,
                 marker_color=cores[i % len(cores)],
@@ -348,8 +374,16 @@ def grafico_e_tabela(evolucao, quantidades, mensal):
         row=2, col=1
     )
 
+    # Reserva no grafico a mesma largura relativa da coluna Indicador.
     inicio_dominio = primeira / (primeira + len(rotulos))
-    fig.update_xaxes(domain=[inicio_dominio, 1.0], row=1, col=1)
+    fig.update_xaxes(
+        domain=[inicio_dominio, 1.0],
+        type="category",
+        categoryorder="array",
+        categoryarray=rotulos,
+        row=1,
+        col=1
+    )
     fig.update_layout(
         height=790,
         barmode="stack",
@@ -357,9 +391,114 @@ def grafico_e_tabela(evolucao, quantidades, mensal):
         legend=dict(orientation="h", y=1.02, x=0),
         margin=dict(l=10, r=15, t=70, b=10)
     )
-    fig.update_xaxes(title_text="Data", row=1, col=1)
     fig.update_yaxes(title_text="Valor ($)", tickprefix="$", row=1, col=1, secondary_y=False)
     fig.update_yaxes(title_text="Acoes/cotas", row=1, col=1, secondary_y=True)
+    return fig
+
+
+# ==================================================
+# DIVIDENDOS DO ATIVO + GRAFICO INDIVIDUAL COM TABELA
+# ==================================================
+
+@st.cache_data(ttl=21600, show_spinner=False)
+def dados_dividendos(ticker, preco_atual, quantidade):
+    try:
+        dividendos = yf.Ticker(ticker).dividends
+        if dividendos is None or dividendos.empty:
+            return {
+                "anual_acao": 0.0, "mensal_acao": 0.0, "yield": 0.0,
+                "anual_posicao": 0.0, "mensal_posicao": 0.0, "frequencia": "Sem pagamento"
+            }
+        limite = pd.Timestamp.now(tz=dividendos.index.tz) - pd.DateOffset(years=1)
+        ultimos = dividendos[dividendos.index >= limite]
+        anual_acao = float(ultimos.sum())
+        pagamentos = int(len(ultimos))
+        if pagamentos >= 10:
+            frequencia = "Mensal"
+        elif pagamentos >= 3:
+            frequencia = "Trimestral"
+        elif pagamentos == 2:
+            frequencia = "Semestral"
+        else:
+            frequencia = "Anual"
+        return {
+            "anual_acao": anual_acao,
+            "mensal_acao": anual_acao / 12,
+            "yield": anual_acao / preco_atual * 100 if preco_atual else 0.0,
+            "anual_posicao": anual_acao * quantidade,
+            "mensal_posicao": anual_acao * quantidade / 12,
+            "frequencia": frequencia
+        }
+    except Exception:
+        return {
+            "anual_acao": 0.0, "mensal_acao": 0.0, "yield": 0.0,
+            "anual_posicao": 0.0, "mensal_posicao": 0.0, "frequencia": "Indisponivel"
+        }
+
+
+def grafico_ativo_com_tabela(close, ticker, posicao, info_div):
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        row_heights=[0.72, 0.28],
+        vertical_spacing=0.025,
+        specs=[[{"type": "xy"}], [{"type": "table"}]]
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=close.index,
+            y=close.values,
+            mode="lines",
+            name=ticker,
+            line=dict(color="#1f77b4", width=2)
+        ),
+        row=1, col=1
+    )
+
+    indicadores = [
+        "Quantidade", "Custo medio", "Preco atual", "Ganho capital",
+        "Dividendo/acao 12m", "Frequencia", "Yield 12m",
+        "Renda mensal posicao", "Renda anual posicao"
+    ]
+    valores = [
+        f"{posicao['Quantidade']:,.3f}",
+        f"${posicao['CustoMedio']:,.2f}",
+        f"${float(close.iloc[-1]):,.2f}",
+        f"${posicao['GanhoDolar']:+,.2f} ({posicao['GanhoPercentual']:+.2f}%)",
+        f"${info_div['anual_acao']:,.2f}",
+        info_div["frequencia"],
+        f"{info_div['yield']:.2f}%",
+        f"${info_div['mensal_posicao']:,.2f}",
+        f"${info_div['anual_posicao']:,.2f}"
+    ]
+
+    fig.add_trace(
+        go.Table(
+            columnwidth=[1.55, 1.0],
+            header=dict(
+                values=["<b>Indicador</b>", f"<b>{ticker}</b>"],
+                fill_color="#f3f5f8",
+                align=["left", "right"],
+                height=28,
+                line_color="#d9dee7"
+            ),
+            cells=dict(
+                values=[indicadores, valores],
+                fill_color=["#f8f9fb", "white"],
+                align=["left", "right"],
+                height=25,
+                line_color="#e4e7ec"
+            )
+        ),
+        row=2, col=1
+    )
+    fig.update_layout(
+        height=560,
+        showlegend=False,
+        hovermode="x unified",
+        margin=dict(l=10, r=10, t=15, b=5)
+    )
+    fig.update_yaxes(tickprefix="$", row=1, col=1)
     return fig
 
 
@@ -382,17 +521,8 @@ def avaliar_compra(indicadores, ticker):
     else:
         alertas.append("Tendencia de curto prazo ainda nao confirmada")
 
-    try:
-        dividendos = yf.Ticker(ticker).dividends
-        if dividendos is not None and not dividendos.empty:
-            limite = pd.Timestamp.now(tz=dividendos.index.tz) - pd.DateOffset(years=1)
-            anual = float(dividendos[dividendos.index >= limite].sum())
-            yield_pct = anual / indicadores["atual"] * 100 if indicadores["atual"] else 0.0
-        else:
-            yield_pct = 0.0
-    except Exception:
-        yield_pct = 0.0
-
+    info_div = dados_dividendos(ticker, indicadores["atual"], 1.0)
+    yield_pct = info_div["yield"]
     if yield_pct >= 4:
         positivos.append(f"Dividend yield historico atrativo: {yield_pct:.2f}%")
     elif yield_pct < 1:
@@ -411,8 +541,12 @@ def avaliar_compra(indicadores, ticker):
         sinal = "AGUARDAR CONFIRMACAO"
     else:
         sinal = "NAO COMPRAR"
-    return positivos, alertas, yield_pct, score_valor, score_renda, sinal
+    return positivos, alertas, score_valor, score_renda, sinal
 
+
+# ==================================================
+# ABAS
+# ==================================================
 
 aba_compras, aba_carteira = st.tabs(["📈 Compras", "💼 Minha Carteira"])
 
@@ -426,7 +560,7 @@ with aba_compras:
                 st.warning(f"Historico indisponivel para {ticker}")
                 continue
             x = calcular_indicadores(close)
-            positivos, alertas, yield_pct, score_valor, score_renda, sinal = avaliar_compra(x, ticker)
+            positivos, alertas, score_valor, score_renda, sinal = avaliar_compra(x, ticker)
             c1, c2, c3 = st.columns([1.15, 3, 1.5])
             with c1:
                 st.subheader(ticker)
@@ -456,7 +590,6 @@ with aba_compras:
                         st.write("⚠️ " + item)
                     if not alertas:
                         st.write("Nenhum alerta relevante identificado.")
-                    st.caption("Valorizacao e renda sao avaliadas separadamente. O sinal nao e uma ordem automatica.")
             with c2:
                 st.line_chart(close, height=300)
             with c3:
@@ -500,7 +633,7 @@ with aba_carteira:
                 figura = grafico_e_tabela(evolucao, quantidades, mensal)
                 if figura is not None:
                     st.plotly_chart(figura, use_container_width=True)
-                st.caption("Dividendos reinvestidos ja estao incorporados ao valor da carteira. A linha laranja mostra sua contribuicao sem duplicar o patrimonio.")
+                st.caption("Dividendos reinvestidos ja estao incorporados ao valor da carteira.")
             else:
                 st.info("Carregue tambem o CSV History para ver evolucao e desempenho mensal.")
 
@@ -520,18 +653,14 @@ with aba_carteira:
                     else:
                         sinal = "MANTER"
 
-                    c1, c2, c3 = st.columns([1.3, 3, 1.5])
+                    info_div = dados_dividendos(ticker, x["atual"], float(posicao["Quantidade"]))
+                    c1, c2, c3 = st.columns([1.2, 3.2, 1.4])
                     with c1:
                         st.subheader(ticker)
-                        st.write(f"📦 Quantidade: **{posicao['Quantidade']:,.3f}**")
-                        st.write(f"💰 Custo medio: **${posicao['CustoMedio']:,.2f}**")
-                        st.write(f"💵 Atual Fidelity: **${posicao['PrecoFidelity']:,.2f}**")
-                        st.write(f"🌐 Atual online: **${x['atual']:,.2f}**")
-                        st.write(f"📊 Valor atual: **${posicao['ValorAtual']:,.2f}**")
-                        st.write(f"📈 Ganho: **{ganho_pct:+.2f}%**")
-                        st.write(f"💲 Ganho: **${posicao['GanhoDolar']:+,.2f}**")
                         st.write(f"📈 RSI: **{x['rsi']:.2f}**")
                         st.write(f"📍 Posicao: **{x['posicao']:.1f}%**")
+                        st.write(f"💸 Yield 12m: **{info_div['yield']:.2f}%**")
+                        st.write(f"📆 Frequencia: **{info_div['frequencia']}**")
                         if sinal == "COMPRAR MAIS":
                             st.success("🟢 ⬆ COMPRAR MAIS")
                         elif sinal == "VENDA PARCIAL":
@@ -539,10 +668,14 @@ with aba_carteira:
                         else:
                             st.warning("🟨 ➖ MANTER")
                     with c2:
-                        st.line_chart(close, height=300)
+                        st.plotly_chart(
+                            grafico_ativo_com_tabela(close, ticker, posicao, info_div),
+                            use_container_width=True,
+                            key=f"grafico_{ticker}"
+                        )
                     with c3:
                         mostrar_noticias(ticker)
                 except Exception as erro:
-                    st.error(f"Erro carregando {ticker}: {erro}")
+                    st.warning(f"Nao foi possivel concluir a analise de {ticker}: {erro}")
         except Exception as erro:
             st.error(f"Erro lendo arquivos Fidelity: {erro}")
