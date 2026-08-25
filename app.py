@@ -236,13 +236,12 @@ def montar_evolucao(historico):
     return evolucao, quantidades, aportes, dividendos
 
 
-def calcular_performance_mensal(evolucao, aportes, dividendos, taxa_fia_anual):
+def calcular_performance_mensal(evolucao, aportes, dividendos):
     linhas = []
     hoje = pd.Timestamp.today().normalize()
     ultimo_fechado = hoje.replace(day=1) - pd.Timedelta(days=1)
     primeiro_mes = evolucao.index.min().replace(day=1)
     meses = pd.date_range(primeiro_mes, ultimo_fechado.replace(day=1), freq="MS")
-    taxa_fia_mes = (1 + taxa_fia_anual / 100) ** (1 / 12) - 1
 
     for inicio_mes in meses:
         fim_mes = inicio_mes + pd.offsets.MonthEnd(0)
@@ -271,9 +270,7 @@ def calcular_performance_mensal(evolucao, aportes, dividendos, taxa_fia_anual):
             "Mercado": mercado,
             "Ganho": ganho,
             "Fim": fim,
-            "FidelityPct": retorno * 100,
-            "FIAPct": taxa_fia_mes * 100,
-            "Diferenca": (retorno - taxa_fia_mes) * 100
+            "FidelityPct": retorno * 100
         })
     return pd.DataFrame(linhas)
 
@@ -286,28 +283,19 @@ def grafico_e_tabela(evolucao, quantidades, mensal):
     if mensal.empty:
         return None
 
-    meses = mensal["MesData"].tolist()
     rotulos = mensal["Mes"].tolist()
-    # Pontos mensais para garantir alinhamento exato com a tabela.
-    fechamento = evolucao.reindex(
-        [data + pd.offsets.MonthEnd(0) for data in meses],
-        method="ffill"
-    )
-    fechamento.index = meses
-    barras = quantidades.reindex(
-        [data + pd.offsets.MonthEnd(0) for data in meses],
-        method="ffill"
-    ).fillna(0)
-    barras.index = meses
+    meses_data = mensal["MesData"].tolist()
+    fins_mes = [data + pd.offsets.MonthEnd(0) for data in meses_data]
+    barras = quantidades.reindex(fins_mes, method="ffill").fillna(0)
 
     fig = make_subplots(
-        rows=2,
-        cols=1,
-        row_heights=[0.65, 0.35],
+        rows=2, cols=1,
+        row_heights=[0.67, 0.33],
         vertical_spacing=0.02,
         specs=[[{"secondary_y": True}], [{"type": "table"}]]
     )
 
+    # Mantem a visao diaria para permitir leitura de tendencia ao longo do tempo.
     for nome, cor in [
         ("Capital aportado", "#1f77b4"),
         ("Valor da carteira", "#2ca02c"),
@@ -315,11 +303,8 @@ def grafico_e_tabela(evolucao, quantidades, mensal):
     ]:
         fig.add_trace(
             go.Scatter(
-                x=rotulos,
-                y=fechamento[nome],
-                name=nome,
-                mode="lines+markers",
-                line=dict(color=cor, width=3)
+                x=evolucao.index, y=evolucao[nome], name=nome,
+                mode="lines", line=dict(color=cor, width=3)
             ),
             row=1, col=1, secondary_y=False
         )
@@ -328,28 +313,21 @@ def grafico_e_tabela(evolucao, quantidades, mensal):
     for i, ticker in enumerate(barras.columns):
         fig.add_trace(
             go.Bar(
-                x=rotulos,
-                y=barras[ticker],
-                name=ticker,
-                marker_color=cores[i % len(cores)],
-                opacity=0.38
+                x=fins_mes, y=barras[ticker], name=ticker,
+                marker_color=cores[i % len(cores)], opacity=0.38,
+                width=18 * 24 * 60 * 60 * 1000
             ),
             row=1, col=1, secondary_y=True
         )
 
-    nomes = ["Inicio", "Aportes", "Dividendos", "Mercado", "Ganho do mes", "Fim", "Fidelity", "FIA", "vs FIA"]
+    nomes = ["Inicio", "Aportes", "Dividendos", "Mercado", "Ganho do mes", "Fim", "Fidelity"]
     valores = [nomes]
     for _, linha in mensal.iterrows():
         valores.append([
-            f"${linha['Inicio']:,.2f}",
-            f"${linha['Aportes']:,.2f}",
-            f"${linha['Dividendos']:,.2f}",
-            f"${linha['Mercado']:+,.2f}",
-            f"${linha['Ganho']:+,.2f}",
-            f"${linha['Fim']:,.2f}",
-            f"{linha['FidelityPct']:+.2f}%",
-            f"{linha['FIAPct']:+.2f}%",
-            ("🟢 " if linha['Diferenca'] >= 0 else "🔴 ") + f"{linha['Diferenca']:+.2f} pp"
+            f"${linha['Inicio']:,.2f}", f"${linha['Aportes']:,.2f}",
+            f"${linha['Dividendos']:,.2f}", f"${linha['Mercado']:+,.2f}",
+            f"${linha['Ganho']:+,.2f}", f"${linha['Fim']:,.2f}",
+            f"{linha['FidelityPct']:+.2f}%"
         ])
 
     primeira = 1.45
@@ -358,36 +336,27 @@ def grafico_e_tabela(evolucao, quantidades, mensal):
             columnwidth=[primeira] + [1.0] * len(rotulos),
             header=dict(
                 values=["<b>Indicador</b>"] + [f"<b>{mes}</b>" for mes in rotulos],
-                fill_color="#f3f5f8",
-                align=["left"] + ["center"] * len(rotulos),
-                height=30,
-                line_color="#d9dee7"
+                fill_color="#f3f5f8", align=["left"] + ["center"] * len(rotulos),
+                height=30, line_color="#d9dee7"
             ),
             cells=dict(
-                values=valores,
-                fill_color=["#f8f9fb"] + ["white"] * len(rotulos),
-                align=["left"] + ["right"] * len(rotulos),
-                height=27,
+                values=valores, fill_color=["#f8f9fb"] + ["white"] * len(rotulos),
+                align=["left"] + ["right"] * len(rotulos), height=27,
                 line_color="#e4e7ec"
             )
-        ),
-        row=2, col=1
+        ), row=2, col=1
     )
 
-    # Reserva no grafico a mesma largura relativa da coluna Indicador.
+    # O grafico e a tabela reservam a mesma margem esquerda para os indicadores.
     inicio_dominio = primeira / (primeira + len(rotulos))
     fig.update_xaxes(
         domain=[inicio_dominio, 1.0],
-        type="category",
-        categoryorder="array",
-        categoryarray=rotulos,
-        row=1,
-        col=1
+        tickmode="array", tickvals=fins_mes, ticktext=rotulos,
+        range=[evolucao.index.min(), fins_mes[-1] + pd.Timedelta(days=10)],
+        row=1, col=1
     )
     fig.update_layout(
-        height=790,
-        barmode="stack",
-        hovermode="x unified",
+        height=760, barmode="stack", hovermode="x unified",
         legend=dict(orientation="h", y=1.02, x=0),
         margin=dict(l=10, r=15, t=70, b=10)
     )
@@ -405,97 +374,84 @@ def dados_dividendos(ticker, preco_atual, quantidade):
     try:
         dividendos = yf.Ticker(ticker).dividends
         if dividendos is None or dividendos.empty:
-            return {
-                "anual_acao": 0.0, "mensal_acao": 0.0, "yield": 0.0,
-                "anual_posicao": 0.0, "mensal_posicao": 0.0, "frequencia": "Sem pagamento"
-            }
+            return {"yield": 0.0, "frequencia": "Sem pagamento"}
         limite = pd.Timestamp.now(tz=dividendos.index.tz) - pd.DateOffset(years=1)
         ultimos = dividendos[dividendos.index >= limite]
         anual_acao = float(ultimos.sum())
-        pagamentos = int(len(ultimos))
-        if pagamentos >= 10:
-            frequencia = "Mensal"
-        elif pagamentos >= 3:
-            frequencia = "Trimestral"
-        elif pagamentos == 2:
-            frequencia = "Semestral"
-        else:
-            frequencia = "Anual"
-        return {
-            "anual_acao": anual_acao,
-            "mensal_acao": anual_acao / 12,
-            "yield": anual_acao / preco_atual * 100 if preco_atual else 0.0,
-            "anual_posicao": anual_acao * quantidade,
-            "mensal_posicao": anual_acao * quantidade / 12,
-            "frequencia": frequencia
-        }
+        pagamentos = len(ultimos)
+        frequencia = "Mensal" if pagamentos >= 10 else ("Trimestral" if pagamentos >= 3 else ("Semestral" if pagamentos == 2 else "Anual"))
+        return {"yield": anual_acao / preco_atual * 100 if preco_atual else 0.0, "frequencia": frequencia}
     except Exception:
-        return {
-            "anual_acao": 0.0, "mensal_acao": 0.0, "yield": 0.0,
-            "anual_posicao": 0.0, "mensal_posicao": 0.0, "frequencia": "Indisponivel"
-        }
+        return {"yield": 0.0, "frequencia": "Indisponivel"}
 
 
-def grafico_ativo_com_tabela(close, ticker, posicao, info_div):
+def tabela_dividendos_mensais(ticker, historico, quantidade_atual):
+    hoje = pd.Timestamp.today().normalize()
+    meses = pd.date_range(end=hoje.replace(day=1), periods=12, freq="MS")
+    rotulos = [data.strftime("%b/%Y") for data in meses]
+
+    try:
+        serie = yf.Ticker(ticker).dividends
+        if serie is None or serie.empty:
+            por_acao = pd.Series(0.0, index=meses)
+        else:
+            indice_sem_tz = pd.to_datetime(serie.index).tz_localize(None)
+            serie = pd.Series(serie.values, index=indice_sem_tz)
+            por_acao = serie.resample("MS").sum().reindex(meses, fill_value=0.0)
+    except Exception:
+        por_acao = pd.Series(0.0, index=meses)
+
+    total_recebido = pd.Series(0.0, index=meses)
+    if historico is not None and not historico.empty:
+        filtro = historico[
+            (historico["Ticker"] == ticker) &
+            (historico["Acao"].str.contains("DIVIDEND RECEIVED", na=False))
+        ].copy()
+        if not filtro.empty:
+            filtro["Mes"] = filtro["Data"].dt.to_period("M").dt.to_timestamp()
+            total_recebido = filtro.groupby("Mes")["Valor"].sum().reindex(meses, fill_value=0.0)
+
+    acumulado = total_recebido.cumsum()
+    return rotulos, por_acao, total_recebido, acumulado
+
+
+def grafico_ativo_com_tabela(close, ticker, rotulos, por_acao, total_recebido, acumulado):
     fig = make_subplots(
-        rows=2,
-        cols=1,
-        row_heights=[0.72, 0.28],
-        vertical_spacing=0.025,
+        rows=2, cols=1,
+        row_heights=[0.72, 0.28], vertical_spacing=0.025,
         specs=[[{"type": "xy"}], [{"type": "table"}]]
     )
     fig.add_trace(
         go.Scatter(
-            x=close.index,
-            y=close.values,
-            mode="lines",
-            name=ticker,
-            line=dict(color="#1f77b4", width=2)
-        ),
-        row=1, col=1
+            x=close.index, y=close.values, mode="lines",
+            name=ticker, line=dict(color="#1f77b4", width=2)
+        ), row=1, col=1
     )
 
-    indicadores = [
-        "Quantidade", "Custo medio", "Preco atual", "Ganho capital",
-        "Dividendo/acao 12m", "Frequencia", "Yield 12m",
-        "Renda mensal posicao", "Renda anual posicao"
-    ]
     valores = [
-        f"{posicao['Quantidade']:,.3f}",
-        f"${posicao['CustoMedio']:,.2f}",
-        f"${float(close.iloc[-1]):,.2f}",
-        f"${posicao['GanhoDolar']:+,.2f} ({posicao['GanhoPercentual']:+.2f}%)",
-        f"${info_div['anual_acao']:,.2f}",
-        info_div["frequencia"],
-        f"{info_div['yield']:.2f}%",
-        f"${info_div['mensal_posicao']:,.2f}",
-        f"${info_div['anual_posicao']:,.2f}"
+        ["Dividendo por acao", "Total recebido no mes", "Recebido acumulado"],
+        *[
+            [f"${por_acao.iloc[i]:,.3f}", f"${total_recebido.iloc[i]:,.2f}", f"${acumulado.iloc[i]:,.2f}"]
+            for i in range(len(rotulos))
+        ]
     ]
-
     fig.add_trace(
         go.Table(
-            columnwidth=[1.55, 1.0],
+            columnwidth=[1.55] + [1.0] * len(rotulos),
             header=dict(
-                values=["<b>Indicador</b>", f"<b>{ticker}</b>"],
-                fill_color="#f3f5f8",
-                align=["left", "right"],
-                height=28,
-                line_color="#d9dee7"
+                values=["<b>Dividendos</b>"] + [f"<b>{mes}</b>" for mes in rotulos],
+                fill_color="#f3f5f8", align=["left"] + ["center"] * len(rotulos),
+                height=28, line_color="#d9dee7"
             ),
             cells=dict(
-                values=[indicadores, valores],
-                fill_color=["#f8f9fb", "white"],
-                align=["left", "right"],
-                height=25,
+                values=valores, fill_color=["#f8f9fb"] + ["white"] * len(rotulos),
+                align=["left"] + ["right"] * len(rotulos), height=25,
                 line_color="#e4e7ec"
             )
-        ),
-        row=2, col=1
+        ), row=2, col=1
     )
     fig.update_layout(
-        height=560,
-        showlegend=False,
-        hovermode="x unified",
+        height=520, showlegend=False, hovermode="x unified",
         margin=dict(l=10, r=10, t=15, b=5)
     )
     fig.update_yaxes(tickprefix="$", row=1, col=1)
@@ -604,7 +560,6 @@ with aba_carteira:
         arq_positions = st.file_uploader("1. CSV Positions da Fidelity", type=["csv"], key="positions")
     with u2:
         arq_history = st.file_uploader("2. CSV History da Fidelity", type=["csv"], key="history")
-    taxa_fia = st.number_input("Taxa anual FIA para benchmark (%)", min_value=0.0, max_value=20.0, value=3.75, step=0.05)
 
     if arq_positions is None:
         st.info("Carregue o CSV Positions para visualizar sua carteira.")
@@ -620,10 +575,11 @@ with aba_carteira:
             m2.metric("Ganho de capital", f"${total_ganho:+,.2f}")
             m3.metric("Retorno", f"{(total_ganho / total_custo * 100 if total_custo else 0):+.2f}%")
 
+            historico = None
             if arq_history is not None:
                 historico = ler_history(arq_history)
                 evolucao, quantidades, aportes, dividendos = montar_evolucao(historico)
-                mensal = calcular_performance_mensal(evolucao, aportes, dividendos, taxa_fia)
+                mensal = calcular_performance_mensal(evolucao, aportes, dividendos)
                 st.subheader("📊 Evolucao da Carteira")
                 k1, k2, k3, k4 = st.columns(4)
                 k1.metric("Capital aportado", f"${evolucao['Capital aportado'].iloc[-1]:,.2f}")
@@ -654,6 +610,9 @@ with aba_carteira:
                         sinal = "MANTER"
 
                     info_div = dados_dividendos(ticker, x["atual"], float(posicao["Quantidade"]))
+                    rotulos_div, por_acao, total_recebido, acumulado = tabela_dividendos_mensais(
+                        ticker, historico, float(posicao["Quantidade"])
+                    )
                     c1, c2, c3 = st.columns([1.2, 3.2, 1.4])
                     with c1:
                         st.subheader(ticker)
@@ -669,7 +628,9 @@ with aba_carteira:
                             st.warning("🟨 ➖ MANTER")
                     with c2:
                         st.plotly_chart(
-                            grafico_ativo_com_tabela(close, ticker, posicao, info_div),
+                            grafico_ativo_com_tabela(
+                                close, ticker, rotulos_div, por_acao, total_recebido, acumulado
+                            ),
                             use_container_width=True,
                             key=f"grafico_{ticker}"
                         )
