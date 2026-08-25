@@ -194,25 +194,133 @@ def monthly_performance(evo, contrib, divs, fia_annual):
 
 def show_monthly_cards(monthly):
     st.subheader("📅 Performance mensal - meses fechados")
-    st.caption("Aportes nao contam como ganho. Mercado = ganho total do mes menos dividendos recebidos.")
+    st.caption(
+        "Aportes nao contam como ganho. Mercado = ganho total do mes menos dividendos recebidos."
+    )
+
     if monthly.empty:
-        st.info("Ainda nao ha mes fechado suficiente para a comparacao."); return
-    for start in range(0, len(monthly), 4):
-        cols = st.columns(min(4, len(monthly)-start))
-        for col, (_, r) in zip(cols, monthly.iloc[start:start+4].iterrows()):
-            with col:
-                delta_color = "🟢" if r.Diferenca >= 0 else "🔴"
-                st.markdown(f"#### {r.Mes}")
-                st.write(f"Inicio: **${r.Inicio:,.2f}**")
-                st.write(f"Aportes: **${r.Aportes:,.2f}**")
-                st.write(f"Dividendos: **${r.Dividendos:,.2f}**")
-                st.write(f"Mercado: **${r.Mercado:+,.2f}**")
-                st.write(f"Ganho do mes: **${r.Ganho:+,.2f}**")
-                st.write(f"Fim: **${r.Fim:,.2f}**")
-                st.write(f"Fidelity: **{r.FidelityPct:+.2f}%**")
-                st.write(f"FIA: **{r.FIAPct:+.2f}%**")
-                st.write(f"{delta_color} vs FIA: **{r.Diferenca:+.2f} pp**")
-                st.divider()
+        st.info("Ainda nao ha mes fechado suficiente para a comparacao.")
+        return
+
+    tabela = monthly.copy()
+
+    # Os meses ficam nas colunas; as descricoes ficam fixas na esquerda.
+    tabela = tabela.set_index("Mes").T
+
+    # Mantem uma ordem logica e compacta para leitura.
+    tabela = tabela.reindex([
+        "Inicio",
+        "Aportes",
+        "Dividendos",
+        "Mercado",
+        "Ganho",
+        "Fim",
+        "FidelityPct",
+        "FIAPct",
+        "Diferenca"
+    ])
+
+    tabela.index = [
+        "Inicio",
+        "Aportes",
+        "Dividendos",
+        "Mercado",
+        "Ganho do mes",
+        "Fim",
+        "Fidelity",
+        "FIA",
+        "Diferenca vs FIA"
+    ]
+
+    def formatar_valor(nome_linha, valor):
+        if nome_linha in ["Fidelity", "FIA"]:
+            return f"{valor:+.2f}%"
+
+        if nome_linha == "Diferenca vs FIA":
+            simbolo = "🟢" if valor >= 0 else "🔴"
+            return f"{simbolo} {valor:+.2f} pp"
+
+        return f"${valor:+,.2f}" if nome_linha in ["Mercado", "Ganho do mes"] else f"${valor:,.2f}"
+
+    tabela_formatada = tabela.copy().astype(object)
+
+    for linha in tabela_formatada.index:
+        for mes in tabela_formatada.columns:
+            tabela_formatada.loc[linha, mes] = formatar_valor(
+                linha,
+                float(tabela.loc[linha, mes])
+            )
+
+    # HTML permite manter a primeira coluna fixa visualmente e alinhar os meses.
+    html = tabela_formatada.to_html(
+        escape=False,
+        border=0,
+        classes="monthly-performance-table"
+    )
+
+    st.markdown(
+        """
+        <style>
+        .monthly-performance-wrapper {
+            overflow-x: auto;
+            width: 100%;
+            margin-top: 0.4rem;
+            margin-bottom: 1.2rem;
+        }
+
+        table.monthly-performance-table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+            min-width: 900px;
+            font-size: 0.88rem;
+        }
+
+        table.monthly-performance-table th,
+        table.monthly-performance-table td {
+            padding: 0.46rem 0.72rem;
+            text-align: right;
+            white-space: nowrap;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+        }
+
+        table.monthly-performance-table thead th {
+            font-weight: 700;
+            text-align: center;
+            border-bottom: 2px solid rgba(128, 128, 128, 0.35);
+        }
+
+        table.monthly-performance-table tbody th {
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            text-align: left;
+            font-weight: 700;
+            background: var(--background-color, white);
+            border-right: 1px solid rgba(128, 128, 128, 0.22);
+        }
+
+        table.monthly-performance-table thead th:first-child {
+            position: sticky;
+            left: 0;
+            z-index: 3;
+            background: var(--background-color, white);
+        }
+
+        table.monthly-performance-table tbody tr:nth-child(4),
+        table.monthly-performance-table tbody tr:nth-child(5),
+        table.monthly-performance-table tbody tr:nth-child(9) {
+            font-weight: 700;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        f'<div class="monthly-performance-wrapper">{html}</div>',
+        unsafe_allow_html=True
+    )
 
 # ---------------- Tabs ----------------
 buy_tab, portfolio_tab = st.tabs(["📈 Compras", "💼 Minha Carteira"])
