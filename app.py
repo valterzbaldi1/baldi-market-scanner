@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
+from pathlib import Path
 from plotly.subplots import make_subplots
 
 from indicators import calcular_rsi
