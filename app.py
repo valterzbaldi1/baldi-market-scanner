@@ -59,13 +59,12 @@ def calcular_indicadores(close):
     rsi = calcular_rsi(close)
     distancia = round((atual - maxima) / maxima * 100, 2) if maxima else 0.0
     posicao = round((atual - minima) / (maxima - minima) * 100, 1) if maxima != minima else 0.0
-    media20 = float(close.rolling(20).mean().iloc[-1]) if len(close) >= 20 else media
-    media50 = float(close.rolling(50).mean().iloc[-1]) if len(close) >= 50 else media
-    tendencia_alta = atual > media20 > media50
+    mm20 = float(close.rolling(20).mean().iloc[-1]) if len(close) >= 20 else media
+    mm50 = float(close.rolling(50).mean().iloc[-1]) if len(close) >= 50 else media
     return {
         "atual": atual, "maxima": maxima, "minima": minima, "media": media,
         "rsi": rsi, "distancia": distancia, "posicao": posicao,
-        "media20": media20, "media50": media50, "tendencia_alta": tendencia_alta
+        "tendencia_alta": atual > mm20 > mm50
     }
 
 
@@ -77,12 +76,11 @@ def titulo_noticia(noticia):
 
 
 def url_noticia(noticia):
-    tentativas = [
+    for tentativa in [
         lambda: noticia["content"]["clickThroughUrl"]["url"],
         lambda: noticia["content"]["canonicalUrl"]["url"],
         lambda: noticia["link"]
-    ]
-    for tentativa in tentativas:
+    ]:
         try:
             return tentativa()
         except Exception:
@@ -100,11 +98,11 @@ def mostrar_noticias(ticker):
     for noticia in noticias:
         titulo = titulo_noticia(noticia)
         url = url_noticia(noticia)
-        titulo_curto = titulo[:45] + "..." if len(titulo) > 45 else titulo
+        curto = titulo[:45] + "..." if len(titulo) > 45 else titulo
         if url:
-            st.markdown(f"- [{titulo_curto}]({url})")
+            st.markdown(f"- [{curto}]({url})")
         else:
-            st.write("• " + titulo_curto)
+            st.write("• " + curto)
         exibidas += 1
         if exibidas >= 3:
             break
@@ -121,24 +119,24 @@ def ler_positions(arquivo):
     posicoes = []
     for linha in linhas[indice + 1:]:
         linha += [""] * max(0, len(cabecalho) - len(linha))
-        registro = dict(zip(cabecalho, linha))
-        ticker = str(registro.get("Symbol", "")).strip().upper()
+        reg = dict(zip(cabecalho, linha))
+        ticker = str(reg.get("Symbol", "")).strip().upper()
         if ticker in ["", "SPAXX", "SPAXX**", "FCASH", "CASH"]:
             continue
         if not ticker.replace(".", "").replace("-", "").isalpha():
             continue
-        quantidade = numero(registro.get("Quantity", 0))
+        quantidade = numero(reg.get("Quantity", 0))
         if quantidade <= 0:
             continue
         posicoes.append({
             "Ticker": ticker,
             "Quantidade": quantidade,
-            "PrecoFidelity": numero(registro.get("Last price", 0)),
-            "ValorAtual": numero(registro.get("Current value", 0)),
-            "GanhoDolar": numero(registro.get("Total gain/loss dollar", 0)),
-            "GanhoPercentual": numero(registro.get("Total gain/loss percent", 0)),
-            "CustoTotal": numero(registro.get("Cost basis total", 0)),
-            "CustoMedio": numero(registro.get("Average cost basis", 0))
+            "PrecoFidelity": numero(reg.get("Last price", 0)),
+            "ValorAtual": numero(reg.get("Current value", 0)),
+            "GanhoDolar": numero(reg.get("Total gain/loss dollar", 0)),
+            "GanhoPercentual": numero(reg.get("Total gain/loss percent", 0)),
+            "CustoTotal": numero(reg.get("Cost basis total", 0)),
+            "CustoMedio": numero(reg.get("Average cost basis", 0))
         })
     return pd.DataFrame(posicoes)
 
@@ -152,20 +150,21 @@ def ler_history(arquivo):
     movimentos = []
     for linha in linhas[indice + 1:]:
         linha += [""] * max(0, len(cabecalho) - len(linha))
-        registro = dict(zip(cabecalho, linha))
-        data = pd.to_datetime(registro.get("Run Date", ""), errors="coerce")
+        reg = dict(zip(cabecalho, linha))
+        data = pd.to_datetime(reg.get("Run Date", ""), errors="coerce")
         if pd.isna(data):
             continue
         movimentos.append({
             "Data": data.normalize(),
-            "Acao": str(registro.get("Action", "")).upper(),
-            "Ticker": str(registro.get("Symbol", "")).strip().upper(),
-            "Quantidade": numero(registro.get("Quantity", 0)),
-            "Valor": numero(registro.get("Amount ($)", 0))
+            "Acao": str(reg.get("Action", "")).upper(),
+            "Ticker": str(reg.get("Symbol", "")).strip().upper(),
+            "Quantidade": numero(reg.get("Quantity", 0)),
+            "Valor": numero(reg.get("Amount ($)", 0))
         })
+    colunas = ["Data", "Acao", "Ticker", "Quantidade", "Valor"]
     if not movimentos:
-        return pd.DataFrame(columns=["Data", "Acao", "Ticker", "Quantidade", "Valor"])
-    return pd.DataFrame(movimentos).sort_values("Data").reset_index(drop=True)
+        return pd.DataFrame(columns=colunas)
+    return pd.DataFrame(movimentos, columns=colunas).sort_values("Data").reset_index(drop=True)
 
 
 @st.cache_data(ttl=21600, show_spinner=False)
@@ -198,11 +197,8 @@ def montar_evolucao(historico):
     quantidades = pd.DataFrame(0.0, index=datas, columns=tickers)
 
     for _, mov in historico.iterrows():
-        data = mov["Data"]
-        acao = mov["Acao"]
-        ticker = mov["Ticker"]
-        quantidade = mov["Quantidade"]
-        valor = mov["Valor"]
+        data, acao = mov["Data"], mov["Acao"]
+        ticker, quantidade, valor = mov["Ticker"], mov["Quantidade"], mov["Valor"]
         if "ELECTRONIC FUNDS TRANSFER RECEIVED" in acao:
             aportes.loc[data] += max(valor, 0)
         if "DIVIDEND RECEIVED" in acao and ticker not in ["", "SPAXX", "SPAXX**"]:
@@ -217,8 +213,8 @@ def montar_evolucao(historico):
     valor_carteira = pd.Series(0.0, index=datas)
     for ticker in tickers:
         if ticker in precos:
-            preco_diario = precos[ticker].reindex(datas).ffill().bfill()
-            valor_carteira += quantidades[ticker] * preco_diario
+            preco = precos[ticker].reindex(datas).ffill().bfill()
+            valor_carteira += quantidades[ticker] * preco
 
     evolucao = pd.DataFrame({
         "Capital aportado": aportes.cumsum(),
@@ -248,7 +244,8 @@ def calcular_performance_mensal(evolucao, aportes, dividendos, taxa_fia_anual):
 
         dias_mes = max((fim_mes - inicio_mes).days + 1, 1)
         aportes_ponderados = 0.0
-        for data, valor in aportes.loc[inicio_mes:fim_mes][aportes.loc[inicio_mes:fim_mes] != 0].items():
+        fluxo_mes = aportes.loc[inicio_mes:fim_mes]
+        for data, valor in fluxo_mes[fluxo_mes != 0].items():
             aportes_ponderados += valor * (((fim_mes - data).days + 1) / dias_mes)
         base = inicio + aportes_ponderados
         retorno = ganho / base if base > 0 else 0.0
@@ -274,14 +271,14 @@ def grafico_e_tabela(evolucao, quantidades, mensal):
         return None
 
     meses = mensal["MesData"].tolist()
-    meses_rotulo = mensal["Mes"].tolist()
+    rotulos = mensal["Mes"].tolist()
     barras = quantidades.reindex(meses, method="ffill").fillna(0)
 
     fig = make_subplots(
         rows=2,
         cols=1,
-        row_heights=[0.68, 0.32],
-        vertical_spacing=0.035,
+        row_heights=[0.66, 0.34],
+        vertical_spacing=0.025,
         specs=[[{"secondary_y": True}], [{"type": "table"}]]
     )
 
@@ -298,32 +295,24 @@ def grafico_e_tabela(evolucao, quantidades, mensal):
                 mode="lines",
                 line=dict(color=cor, width=3)
             ),
-            row=1,
-            col=1,
-            secondary_y=False
+            row=1, col=1, secondary_y=False
         )
 
     cores = ["#9467bd", "#8c564b", "#17becf", "#e377c2"]
-    for indice, ticker in enumerate(barras.columns):
+    for i, ticker in enumerate(barras.columns):
         fig.add_trace(
             go.Bar(
                 x=meses,
                 y=barras[ticker],
                 name=ticker,
-                marker_color=cores[indice % len(cores)],
+                marker_color=cores[i % len(cores)],
                 opacity=0.38
             ),
-            row=1,
-            col=1,
-            secondary_y=True
+            row=1, col=1, secondary_y=True
         )
 
-    nomes_linhas = [
-        "Inicio", "Aportes", "Dividendos", "Mercado",
-        "Ganho do mes", "Fim", "Fidelity", "FIA", "vs FIA"
-    ]
-
-    valores = [nomes_linhas]
+    nomes = ["Inicio", "Aportes", "Dividendos", "Mercado", "Ganho do mes", "Fim", "Fidelity", "FIA", "vs FIA"]
+    valores = [nomes]
     for _, linha in mensal.iterrows():
         valores.append([
             f"${linha['Inicio']:,.2f}",
@@ -337,37 +326,30 @@ def grafico_e_tabela(evolucao, quantidades, mensal):
             ("🟢 " if linha['Diferenca'] >= 0 else "🔴 ") + f"{linha['Diferenca']:+.2f} pp"
         ])
 
-    primeira_largura = 1.45
-    larguras = [primeira_largura] + [1.0] * len(meses_rotulo)
-    cabecalho = ["Indicador"] + meses_rotulo
-
+    primeira = 1.45
     fig.add_trace(
         go.Table(
-            columnwidth=larguras,
+            columnwidth=[primeira] + [1.0] * len(rotulos),
             header=dict(
-                values=[f"<b>{valor}</b>" for valor in cabecalho],
+                values=["<b>Indicador</b>"] + [f"<b>{mes}</b>" for mes in rotulos],
                 fill_color="#f3f5f8",
-                align=["left"] + ["center"] * len(meses_rotulo),
+                align=["left"] + ["center"] * len(rotulos),
                 height=30,
                 line_color="#d9dee7"
             ),
             cells=dict(
                 values=valores,
-                fill_color=["#f8f9fb"] + ["white"] * len(meses_rotulo),
-                align=["left"] + ["right"] * len(meses_rotulo),
+                fill_color=["#f8f9fb"] + ["white"] * len(rotulos),
+                align=["left"] + ["right"] * len(rotulos),
                 height=27,
                 line_color="#e4e7ec"
             )
         ),
-        row=2,
-        col=1
+        row=2, col=1
     )
 
-    # A area do grafico comeca depois da largura reservada aos nomes da tabela.
-    total_largura = primeira_largura + len(meses_rotulo)
-    inicio_dominio = primeira_largura / total_largura
+    inicio_dominio = primeira / (primeira + len(rotulos))
     fig.update_xaxes(domain=[inicio_dominio, 1.0], row=1, col=1)
-
     fig.update_layout(
         height=790,
         barmode="stack",
@@ -381,31 +363,57 @@ def grafico_e_tabela(evolucao, quantidades, mensal):
     return fig
 
 
-def motivos_compra(x, ticker):
-    positivos, negativos = [], []
-    if x["posicao"] <= 25: positivos.append("Posicao historica baixa")
-    elif x["posicao"] >= 80: negativos.append("Preco proximo do topo da faixa")
-    if x["distancia"] <= -15: positivos.append("Desconto superior a 15% frente a maxima")
-    elif x["distancia"] > -5: negativos.append("Pouco desconto frente a maxima")
-    if x["rsi"] < 40: positivos.append("RSI em regiao atrativa")
-    elif x["rsi"] > 70: negativos.append("RSI em sobrecompra")
-    if x["tendencia_alta"]: positivos.append("Tendencia de alta confirmada pelas medias")
-    else: negativos.append("Tendencia de curto prazo ainda nao confirmada")
+def avaliar_compra(indicadores, ticker):
+    positivos, alertas = [], []
+    if indicadores["posicao"] <= 25:
+        positivos.append("Posicao historica baixa")
+    elif indicadores["posicao"] >= 80:
+        alertas.append("Preco proximo do topo da faixa")
+    if indicadores["distancia"] <= -15:
+        positivos.append("Desconto superior a 15% frente a maxima")
+    elif indicadores["distancia"] > -5:
+        alertas.append("Pouco desconto frente a maxima")
+    if indicadores["rsi"] < 40:
+        positivos.append("RSI em regiao atrativa")
+    elif indicadores["rsi"] > 70:
+        alertas.append("RSI em sobrecompra")
+    if indicadores["tendencia_alta"]:
+        positivos.append("Tendencia de alta confirmada pelas medias")
+    else:
+        alertas.append("Tendencia de curto prazo ainda nao confirmada")
 
     try:
-        divs = yf.Ticker(ticker).dividends
-        if divs is not None and not divs.empty:
-            limite = pd.Timestamp.now(tz=divs.index.tz) - pd.DateOffset(years=1)
-            anual = float(divs[divs.index >= limite].sum())
-            yield_pct = anual / x["atual"] * 100 if x["atual"] else 0
-        else: yield_pct = 0
-    except Exception: yield_pct = 0
+        dividendos = yf.Ticker(ticker).dividends
+        if dividendos is not None and not dividendos.empty:
+            limite = pd.Timestamp.now(tz=dividendos.index.tz) - pd.DateOffset(years=1)
+            anual = float(dividendos[dividendos.index >= limite].sum())
+            yield_pct = anual / indicadores["atual"] * 100 if indicadores["atual"] else 0.0
+        else:
+            yield_pct = 0.0
+    except Exception:
+        yield_pct = 0.0
 
-    if yield_pct >= 4: positivos.append(f"Dividend yield historico atrativo: {yield_pct:.2f}%")
-    elif yield_pct < 1: negativos.append(f"Dividend yield baixo: {yield_pct:.2f}%")
-    return positivos, negativos, yield_pct
+    if yield_pct >= 4:
+        positivos.append(f"Dividend yield historico atrativo: {yield_pct:.2f}%")
+    elif yield_pct < 1:
+        alertas.append(f"Dividend yield baixo: {yield_pct:.2f}%")
 
-# ---------------- Abas ----------------
+    score_valor = 50
+    score_valor += 25 if indicadores["posicao"] < 30 else (-20 if indicadores["posicao"] > 80 else 0)
+    score_valor += 20 if indicadores["distancia"] < -15 else (-10 if indicadores["distancia"] > -5 else 0)
+    score_valor += 15 if indicadores["rsi"] < 45 else (-15 if indicadores["rsi"] > 70 else 0)
+    score_valor = max(0, min(100, score_valor))
+    score_renda = max(0, min(100, yield_pct * 12))
+
+    if score_valor >= 70:
+        sinal = "CANDIDATA A COMPRA"
+    elif score_valor >= 45:
+        sinal = "AGUARDAR CONFIRMACAO"
+    else:
+        sinal = "NAO COMPRAR"
+    return positivos, alertas, yield_pct, score_valor, score_renda, sinal
+
+
 aba_compras, aba_carteira = st.tabs(["📈 Compras", "💼 Minha Carteira"])
 
 with aba_compras:
@@ -418,13 +426,7 @@ with aba_compras:
                 st.warning(f"Historico indisponivel para {ticker}")
                 continue
             x = calcular_indicadores(close)
-            positivos, negativos, yield_pct = motivos_compra(x, ticker)
-            score_valor = max(0, min(100, 50 + (25 if x['posicao'] < 30 else -20 if x['posicao'] > 80 else 0) + (20 if x['distancia'] < -15 else -10 if x['distancia'] > -5 else 0) + (15 if x['rsi'] < 45 else -15 if x['rsi'] > 70 else 0)))
-            score_renda = max(0, min(100, yield_pct * 12))
-            if score_valor >= 70: sinal = "CANDIDATA A COMPRA"
-            elif score_valor >= 45: sinal = "AGUARDAR CONFIRMACAO"
-            else: sinal = "NAO COMPRAR"
-
+            positivos, alertas, yield_pct, score_valor, score_renda, sinal = avaliar_compra(x, ticker)
             c1, c2, c3 = st.columns([1.15, 3, 1.5])
             with c1:
                 st.subheader(ticker)
@@ -437,28 +439,39 @@ with aba_compras:
                 st.write(f"📉 Dist. Max: **{x['distancia']:+.2f}%**")
                 st.write(f"📈 Valorizacao: **{score_valor}/100**")
                 st.write(f"💸 Renda: **{score_renda:.0f}/100**")
-                if sinal == "CANDIDATA A COMPRA": st.success("🟢 CANDIDATA A COMPRA")
-                elif sinal == "AGUARDAR CONFIRMACAO": st.warning("🟨 AGUARDAR CONFIRMACAO")
-                else: st.error("🔴 NAO COMPRAR")
+                if sinal == "CANDIDATA A COMPRA":
+                    st.success("🟢 CANDIDATA A COMPRA")
+                elif sinal == "AGUARDAR CONFIRMACAO":
+                    st.warning("🟨 AGUARDAR CONFIRMACAO")
+                else:
+                    st.error("🔴 NAO COMPRAR")
                 with st.expander("Por que este sinal?"):
                     st.markdown("**Pontos positivos**")
-                    for item in positivos: st.write("✅ " + item)
-                    if not positivos: st.write("Nenhum fator positivo forte identificado.")
+                    for item in positivos:
+                        st.write("✅ " + item)
+                    if not positivos:
+                        st.write("Nenhum fator positivo forte identificado.")
                     st.markdown("**Pontos de atencao**")
-                    for item in negativos: st.write("⚠️ " + item)
-                    if not negativos: st.write("Nenhum alerta relevante identificado.")
-                    st.caption("Valorizacao e renda sao avaliadas separadamente. O sinal nao e uma ordem automatica de compra.")
-            with c2: st.line_chart(close, height=300)
-            with c3: mostrar_noticias(ticker)
+                    for item in alertas:
+                        st.write("⚠️ " + item)
+                    if not alertas:
+                        st.write("Nenhum alerta relevante identificado.")
+                    st.caption("Valorizacao e renda sao avaliadas separadamente. O sinal nao e uma ordem automatica.")
+            with c2:
+                st.line_chart(close, height=300)
+            with c3:
+                mostrar_noticias(ticker)
         except Exception as erro:
             st.error(f"Erro carregando {ticker}: {erro}")
 
 with aba_carteira:
     st.header("💼 Minha Carteira")
     u1, u2 = st.columns(2)
-    with u1: arq_positions = st.file_uploader("1. CSV Positions da Fidelity", type=["csv"], key="positions")
-    with u2: arq_history = st.file_uploader("2. CSV History da Fidelity", type=["csv"], key="history")
-    taxa_fia = st.number_input("Taxa anual FIA para benchmark (%)", 0.0, 20.0, 3.75, 0.05)
+    with u1:
+        arq_positions = st.file_uploader("1. CSV Positions da Fidelity", type=["csv"], key="positions")
+    with u2:
+        arq_history = st.file_uploader("2. CSV History da Fidelity", type=["csv"], key="history")
+    taxa_fia = st.number_input("Taxa anual FIA para benchmark (%)", min_value=0.0, max_value=20.0, value=3.75, step=0.05)
 
     if arq_positions is None:
         st.info("Carregue o CSV Positions para visualizar sua carteira.")
@@ -466,9 +479,13 @@ with aba_carteira:
         try:
             carteira = ler_positions(arq_positions)
             st.success(f"{len(carteira)} posicoes carregadas da Fidelity.")
-            total_valor = carteira["ValorAtual"].sum(); total_ganho = carteira["GanhoDolar"].sum(); total_custo = carteira["CustoTotal"].sum()
+            total_valor = carteira["ValorAtual"].sum()
+            total_ganho = carteira["GanhoDolar"].sum()
+            total_custo = carteira["CustoTotal"].sum()
             m1, m2, m3 = st.columns(3)
-            m1.metric("Valor atual", f"${total_valor:,.2f}"); m2.metric("Ganho de capital", f"${total_ganho:+,.2f}"); m3.metric("Retorno", f"{(total_ganho/total_custo*100 if total_custo else 0):+.2f}%")
+            m1.metric("Valor atual", f"${total_valor:,.2f}")
+            m2.metric("Ganho de capital", f"${total_ganho:+,.2f}")
+            m3.metric("Retorno", f"{(total_ganho / total_custo * 100 if total_custo else 0):+.2f}%")
 
             if arq_history is not None:
                 historico = ler_history(arq_history)
@@ -481,20 +498,29 @@ with aba_carteira:
                 k3.metric("Dividendos recebidos", f"${evolucao['Dividendos acumulados'].iloc[-1]:,.2f}")
                 k4.metric("Cotas atuais", f"{quantidades.iloc[-1].sum():,.3f}")
                 figura = grafico_e_tabela(evolucao, quantidades, mensal)
-                if figura is not None: st.plotly_chart(figura, use_container_width=True)
+                if figura is not None:
+                    st.plotly_chart(figura, use_container_width=True)
                 st.caption("Dividendos reinvestidos ja estao incorporados ao valor da carteira. A linha laranja mostra sua contribuicao sem duplicar o patrimonio.")
             else:
                 st.info("Carregue tambem o CSV History para ver evolucao e desempenho mensal.")
 
             for _, posicao in carteira.iterrows():
-                st.divider(); ticker = posicao["Ticker"]
+                st.divider()
+                ticker = posicao["Ticker"]
                 try:
                     close = serie_close(baixar_precos(ticker), ticker)
-                    if close is None or close.empty: continue
+                    if close is None or close.empty:
+                        continue
                     x = calcular_indicadores(close)
                     ganho_pct = float(posicao["GanhoPercentual"])
-                    sinal = "VENDA PARCIAL" if ganho_pct >= 6 and (x['rsi'] >= 65 or x['posicao'] >= 80) else ("COMPRAR MAIS" if x['rsi'] < 40 and x['posicao'] < 40 else "MANTER")
-                    c1,c2,c3 = st.columns([1.3,3,1.5])
+                    if ganho_pct >= 6 and (x["rsi"] >= 65 or x["posicao"] >= 80):
+                        sinal = "VENDA PARCIAL"
+                    elif x["rsi"] < 40 and x["posicao"] < 40:
+                        sinal = "COMPRAR MAIS"
+                    else:
+                        sinal = "MANTER"
+
+                    c1, c2, c3 = st.columns([1.3, 3, 1.5])
                     with c1:
                         st.subheader(ticker)
                         st.write(f"📦 Quantidade: **{posicao['Quantidade']:,.3f}**")
@@ -506,11 +532,16 @@ with aba_carteira:
                         st.write(f"💲 Ganho: **${posicao['GanhoDolar']:+,.2f}**")
                         st.write(f"📈 RSI: **{x['rsi']:.2f}**")
                         st.write(f"📍 Posicao: **{x['posicao']:.1f}%**")
-                        if sinal == "COMPRAR MAIS": st.success("🟢 ⬆ COMPRAR MAIS")
-                        elif sinal == "VENDA PARCIAL": st.error("🔴 ⬇ VENDA PARCIAL")
-                        else: st.warning("🟨 ➖ MANTER")
-                    with c2: st.line_chart(close, height=300)
-                    with c3: mostrar_noticias(ticker)
+                        if sinal == "COMPRAR MAIS":
+                            st.success("🟢 ⬆ COMPRAR MAIS")
+                        elif sinal == "VENDA PARCIAL":
+                            st.error("🔴 ⬇ VENDA PARCIAL")
+                        else:
+                            st.warning("🟨 ➖ MANTER")
+                    with c2:
+                        st.line_chart(close, height=300)
+                    with c3:
+                        mostrar_noticias(ticker)
                 except Exception as erro:
                     st.error(f"Erro carregando {ticker}: {erro}")
         except Exception as erro:
