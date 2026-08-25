@@ -263,169 +263,64 @@ def ler_csv_fidelity(arquivo):
 
     arquivo.seek(0)
 
+    # Lê o arquivo sem assumir que existe um cabeçalho correto.
     linhas = pd.read_csv(
         arquivo,
         header=None,
         dtype=str,
         engine="python",
-        on_bad_lines="skip"
+        on_bad_lines="skip",
+        skip_blank_lines=True
     )
 
     linhas = linhas.dropna(
         how="all"
     )
 
-    linha_cabecalho = None
+    # Remove colunas totalmente vazias.
+    linhas = linhas.dropna(
+        axis=1,
+        how="all"
+    )
 
-    for indice, linha in linhas.iterrows():
+    # Esta é a estrutura observada no CSV exportado pela Fidelity:
+    #
+    # Coluna 0  = Account Number
+    # Coluna 1  = Account Name
+    # Coluna 2  = Symbol
+    # Coluna 3  = Description
+    # Coluna 4  = Quantity
+    # Coluna 5  = Last Price
+    # Coluna 6  = Today's Gain/Loss Dollar
+    # Coluna 7  = Current Value
+    # Coluna 8  = Today's Gain/Loss Dollar
+    # Coluna 9  = Today's Gain/Loss Percent
+    # Coluna 10 = Total Gain/Loss Dollar
+    # Coluna 11 = Total Gain/Loss Percent
+    # Coluna 12 = Percent of Account
+    # Coluna 13 = Cost Basis Total
+    # Coluna 14 = Average Cost Basis
+    # Coluna 15 = Type
 
-        valores = [
-            str(valor).strip().lower()
-            for valor in linha.tolist()
-        ]
+    if linhas.shape[1] < 15:
 
-        if (
-            "symbol" in valores
-            or "ticker" in valores
-        ):
-            linha_cabecalho = indice
-            break
-
-    if linha_cabecalho is not None:
-
-        cabecalho = [
-            str(valor).strip()
-            for valor in linhas.loc[
-                linha_cabecalho
-            ].tolist()
-        ]
-
-        dados = linhas.loc[
-            linha_cabecalho + 1:
-        ].copy()
-
-        dados.columns = cabecalho
-
-        mapa_colunas = {
-            "ticker": [
-                "Symbol",
-                "Ticker"
-            ],
-            "quantidade": [
-                "Quantity"
-            ],
-            "preco": [
-                "Last Price",
-                "Last price"
-            ],
-            "valor_atual": [
-                "Current Value",
-                "Current value"
-            ],
-            "ganho_dolar": [
-                "Total Gain/Loss Dollar",
-                "Total Gain/Loss $"
-            ],
-            "ganho_percentual": [
-                "Total Gain/Loss Percent",
-                "Total Gain/Loss %"
-            ],
-            "custo_total": [
-                "Cost Basis Total",
-                "Cost basis total"
-            ],
-            "custo_medio": [
-                "Average Cost Basis",
-                "Average cost basis"
-            ]
-        }
-
-        colunas = {}
-
-        for chave, possibilidades in mapa_colunas.items():
-
-            colunas[chave] = None
-
-            for possibilidade in possibilidades:
-
-                if possibilidade in dados.columns:
-
-                    colunas[chave] = possibilidade
-                    break
-
-        if colunas["ticker"] is None:
-
-            raise ValueError(
-                "A coluna Symbol não foi encontrada."
-            )
-
-        resultado = pd.DataFrame()
-
-        resultado["Ticker"] = dados[
-            colunas["ticker"]
-        ]
-
-        resultado["Quantidade"] = (
-            dados[colunas["quantidade"]]
-            if colunas["quantidade"]
-            else 0
+        raise ValueError(
+            "O CSV não possui o número esperado de colunas. "
+            f"Foram encontradas {linhas.shape[1]} colunas."
         )
 
-        resultado["PrecoFidelity"] = (
-            dados[colunas["preco"]]
-            if colunas["preco"]
-            else 0
-        )
+    resultado = pd.DataFrame({
+        "Ticker": linhas.iloc[:, 2],
+        "Quantidade": linhas.iloc[:, 4],
+        "PrecoFidelity": linhas.iloc[:, 5],
+        "ValorAtual": linhas.iloc[:, 7],
+        "GanhoDolar": linhas.iloc[:, 10],
+        "GanhoPercentual": linhas.iloc[:, 11],
+        "CustoTotal": linhas.iloc[:, 13],
+        "CustoMedio": linhas.iloc[:, 14]
+    })
 
-        resultado["ValorAtual"] = (
-            dados[colunas["valor_atual"]]
-            if colunas["valor_atual"]
-            else 0
-        )
-
-        resultado["GanhoDolar"] = (
-            dados[colunas["ganho_dolar"]]
-            if colunas["ganho_dolar"]
-            else 0
-        )
-
-        resultado["GanhoPercentual"] = (
-            dados[colunas["ganho_percentual"]]
-            if colunas["ganho_percentual"]
-            else 0
-        )
-
-        resultado["CustoTotal"] = (
-            dados[colunas["custo_total"]]
-            if colunas["custo_total"]
-            else 0
-        )
-
-        resultado["CustoMedio"] = (
-            dados[colunas["custo_medio"]]
-            if colunas["custo_medio"]
-            else 0
-        )
-
-    else:
-
-        if linhas.shape[1] < 15:
-
-            raise ValueError(
-                "O formato do CSV da Fidelity não foi reconhecido."
-            )
-
-        resultado = pd.DataFrame({
-            "Ticker": linhas.iloc[:, 2],
-            "Quantidade": linhas.iloc[:, 4],
-            "PrecoFidelity": linhas.iloc[:, 5],
-            "ValorAtual": linhas.iloc[:, 7],
-            "GanhoDolar": linhas.iloc[:, 10],
-            "GanhoPercentual": linhas.iloc[:, 11],
-            "CustoTotal": linhas.iloc[:, 13],
-            "CustoMedio": linhas.iloc[:, 14]
-        })
-
+    # Limpa os tickers.
     resultado["Ticker"] = (
         resultado["Ticker"]
         .astype(str)
@@ -433,26 +328,31 @@ def ler_csv_fidelity(arquivo):
         .str.upper()
     )
 
-    resultado = resultado[
-        resultado["Ticker"].str.match(
-            r"^[A-Z][A-Z.\-]{0,9}$",
-            na=False
-        )
-    ]
-
+    # Remove dinheiro em money market, caixa e linhas legais.
     tickers_excluidos = [
+        "",
+        "NAN",
+        "NONE",
         "SPAXX",
         "SPAXX**",
         "FCASH",
         "CASH",
         "PENDING",
-        "NONE",
-        "NAN"
+        "PENDING ACTIVITY",
+        "SYMBOL"
     ]
 
     resultado = resultado[
         ~resultado["Ticker"].isin(
             tickers_excluidos
+        )
+    ]
+
+    # Mantém somente símbolos válidos, como JEPI, MAIN e O.
+    resultado = resultado[
+        resultado["Ticker"].str.match(
+            r"^[A-Z][A-Z.\-]{0,9}$",
+            na=False
         )
     ]
 
@@ -468,16 +368,17 @@ def ler_csv_fidelity(arquivo):
 
     for coluna in colunas_numericas:
 
-        resultado[coluna] = resultado[
-            coluna
-        ].apply(
-            converter_numero
+        resultado[coluna] = (
+            resultado[coluna]
+            .apply(converter_numero)
         )
 
+    # Remove posições sem quantidade.
     resultado = resultado[
         resultado["Quantidade"] > 0
     ]
 
+    # Evita duplicidade.
     resultado = resultado.drop_duplicates(
         subset=["Ticker"],
         keep="last"
@@ -486,8 +387,6 @@ def ler_csv_fidelity(arquivo):
     return resultado.reset_index(
         drop=True
     )
-
-
 def estimar_dividendos(
     ticker,
     quantidade
