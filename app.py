@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 from datetime import timedelta
 
 import pandas as pd
@@ -607,6 +608,10 @@ def exibir_card_compra(analise, criterio, posicao_ranking=None):
         st.markdown("**Estrategias**")
         st.write(f"🔄 Swing: **{analise['score_swing']}/100**")
         st.write(f"💸 Dividendos: **{analise['score_renda']}/100**")
+        if "score_hibrido" in analise:
+            st.write(f"🔄💸 Hibrido: **{analise['score_hibrido']}/100**")
+        if analise.get("asset_type"):
+            st.write(f"🏷️ Tipo: **{analise['asset_type']}**")
         st.write(f"📆 Frequencia: **{analise['frequencia']}**")
         st.write(f"💵 Yield 12m: **{analise['yield']:.2f}%**")
         st.write(f"🧾 $100 compram: **{analise['quantidade_100']:.3f} acoes/cotas**")
@@ -627,6 +632,13 @@ def exibir_card_compra(analise, criterio, posicao_ranking=None):
                 st.warning("🟨 RENDA MODERADA")
             else:
                 st.error("🔴 FRACA PARA RENDA")
+        elif criterio == "hibrido":
+            if analise.get("score_hibrido", 0) >= 70:
+                st.success("🟢 CANDIDATA HIBRIDA")
+            elif analise.get("score_hibrido", 0) >= 50:
+                st.warning("🟨 HIBRIDA MODERADA")
+            else:
+                st.error("🔴 HIBRIDA FRACA")
         else:
             perfil = "HIBRIDA" if analise["score_swing"] >= 60 and analise["score_renda"] >= 60 else (
                 "SWING" if analise["score_swing"] > analise["score_renda"] else "DIVIDENDOS"
@@ -661,6 +673,110 @@ def exibir_card_compra(analise, criterio, posicao_ranking=None):
 
 
 # ==================================================
+# LEITURA DOS RANKINGS DIARIOS
+# ==================================================
+
+def carregar_ranking(caminho):
+    arquivo = Path(caminho)
+    if not arquivo.exists():
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(arquivo)
+    except Exception:
+        return pd.DataFrame()
+
+
+def carregar_status_scanner():
+    arquivo = Path("scanner_status.json")
+    if not arquivo.exists():
+        return {}
+    try:
+        return json.loads(arquivo.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def analise_do_ranking(linha):
+    ticker = str(linha["Ticker"]).strip().upper()
+    close = serie_close(baixar_precos(ticker, periodo="1y"), ticker)
+    if close is None or close.empty:
+        return None
+
+    x = calcular_indicadores(close)
+    score_swing = int(round(float(linha.get("ScoreSwing", 0))))
+    score_renda = int(round(float(linha.get("ScoreDividendos", 0))))
+    yield_12m = float(linha.get("Yield12m", 0))
+    frequencia = str(linha.get("DividendFrequency", "Indisponivel"))
+    renda_anual_100 = float(linha.get("IncomeAnnualPer100", yield_12m))
+    renda_mensal_100 = float(
+        linha.get("IncomeMonthlyEquivalentPer100", yield_12m / 12)
+    )
+    quantidade_100 = 100 / x["atual"] if x["atual"] else 0.0
+
+    positivos = []
+    alertas = []
+
+    if x["posicao"] <= 30:
+        positivos.append("Preco na parte inferior da faixa de 12 meses")
+    elif x["posicao"] >= 80:
+        alertas.append("Preco proximo do topo da faixa de 12 meses")
+
+    if x["rsi"] < 40:
+        positivos.append("RSI em regiao atrativa")
+    elif x["rsi"] > 70:
+        alertas.append("RSI elevado")
+
+    if x["tendencia_alta"]:
+        positivos.append("Tendencia de alta confirmada pelas medias")
+    else:
+        alertas.append("Tendencia de curto prazo ainda nao confirmada")
+
+    if yield_12m >= 5:
+        positivos.append(f"Yield de 12 meses: {yield_12m:.2f}%")
+    elif yield_12m <= 1:
+        alertas.append(f"Yield baixo: {yield_12m:.2f}%")
+
+    asset_type = str(linha.get("AssetType", "Ativo"))
+    security_name = str(linha.get("SecurityName", ticker))
+
+    return {
+        "ticker": ticker,
+        "security_name": security_name,
+        "asset_type": asset_type,
+        "close": close,
+        "indicadores": x,
+        "positivos": positivos,
+        "alertas": alertas,
+        "score_swing": score_swing,
+        "score_renda": score_renda,
+        "score_hibrido": int(round(float(linha.get("ScoreHibrido", 0)))),
+        "frequencia": frequencia,
+        "yield": yield_12m,
+        "renda_anual_100": renda_anual_100,
+        "renda_mensal_100": renda_mensal_100,
+        "quantidade_100": quantidade_100,
+    }
+
+
+def exibir_linhas_ranking(ranking, quantidade, criterio):
+    limite = min(quantidade, len(ranking))
+    for posicao in range(limite):
+        linha = ranking.iloc[posicao]
+        try:
+            analise = analise_do_ranking(linha)
+            if analise is not None:
+                exibir_card_compra(
+                    analise,
+                    criterio=criterio,
+                    posicao_ranking=posicao + 1,
+                )
+        except Exception as erro:
+            st.warning(
+                f"Nao foi possivel exibir {linha.get('Ticker', 'ticker')}: {erro}"
+            )
+
+
+# ==================================================
 # ABAS
 # ==================================================
 
@@ -668,75 +784,97 @@ aba_compras, aba_carteira = st.tabs(["📈 Compras", "💼 Minha Carteira"])
 
 with aba_compras:
     st.header("📈 Oportunidades de Compra")
-    st.caption(
-        "Versao piloto: o ranking automatico abaixo usa um universo inicial diversificado. "
-        "Depois de validarmos a logica e o layout, ampliaremos o scanner gradualmente."
+
+    ranking_swing = carregar_ranking("top50_swing.csv")
+    ranking_dividendos = carregar_ranking("top50_dividendos.csv")
+    ranking_hibridas = carregar_ranking("top50_hibridas.csv")
+    status_scanner = carregar_status_scanner()
+
+    if status_scanner:
+        atualizado = status_scanner.get("updated_at_utc", "Indisponivel")
+        universo = status_scanner.get("universe_symbols", 0)
+        analisados = status_scanner.get("valid_assets_analyzed", 0)
+        falhas = status_scanner.get("failed_batches", 0)
+
+        s1, s2, s3, s4 = st.columns(4)
+        s1.metric("Ultima atualizacao", atualizado)
+        s2.metric("Universo encontrado", f"{universo:,}")
+        s3.metric("Ativos validos", f"{analisados:,}")
+        s4.metric("Lotes com falha", falhas)
+    else:
+        st.warning(
+            "scanner_status.json nao foi encontrado. "
+            "Execute o Daily Market Scanner no GitHub Actions."
+        )
+
+    opcoes_top = [3, 5, 10, 20]
+    quantidade_exibida = st.selectbox(
+        "Quantidade de oportunidades por categoria",
+        options=opcoes_top,
+        index=0,
+        key="quantidade_top_dashboard",
     )
 
-    with st.spinner("Analisando candidatas para swing e dividendos..."):
-        analises = []
-        for ticker in UNIVERSO_PILOTO:
-            try:
-                analise = analisar_ticker_compra(ticker)
-                if analise is not None:
-                    analises.append(analise)
-            except Exception:
-                continue
-
-    if not analises:
-        st.error("Nenhuma candidata pode ser analisada neste momento.")
+    if ranking_swing.empty:
+        st.error("top50_swing.csv nao foi encontrado ou esta vazio.")
     else:
-        top_swing = sorted(
-            analises,
-            key=lambda item: item["score_swing"],
-            reverse=True
-        )[:3]
-
-        tickers_swing = {item["ticker"] for item in top_swing}
-        candidatas_renda = [
-            item for item in analises
-            if item["ticker"] not in tickers_swing
-        ]
-        top_dividendos = sorted(
-            candidatas_renda,
-            key=lambda item: item["score_renda"],
-            reverse=True
-        )[:3]
-
-        st.subheader("🔄 Top 3 para Swing Trade")
+        st.subheader(f"🔄 Top {quantidade_exibida} para Swing Trade")
         st.caption(
-            "Ordenadas pelo potencial de valorizacao, posicao historica, desconto frente a maxima e RSI."
+            "Ranking diario baseado em RSI, posicao na faixa de 12 meses, "
+            "tendencia, retorno recente, volatilidade e liquidez."
         )
-        for ranking, analise in enumerate(top_swing, start=1):
-            exibir_card_compra(analise, criterio="swing", posicao_ranking=ranking)
+        exibir_linhas_ranking(
+            ranking_swing,
+            quantidade_exibida,
+            criterio="swing",
+        )
 
-        st.subheader("💸 Top 3 para Dividendos")
+    if ranking_dividendos.empty:
+        st.error("top50_dividendos.csv nao foi encontrado ou esta vazio.")
+    else:
+        st.subheader(f"💸 Top {quantidade_exibida} para Dividendos")
         st.caption(
-            "Ordenadas por yield de 12 meses e capacidade estimada de gerar renda. "
-            "As candidatas do Top Swing foram excluidas desta lista para exibir seis sugestoes distintas."
+            "Ranking diario baseado em yield, frequencia, regularidade, "
+            "crescimento da distribuicao, preco de entrada e risco."
         )
-        for ranking, analise in enumerate(top_dividendos, start=1):
-            exibir_card_compra(analise, criterio="dividendos", posicao_ranking=ranking)
+        exibir_linhas_ranking(
+            ranking_dividendos,
+            quantidade_exibida,
+            criterio="dividendos",
+        )
+
+    if ranking_hibridas.empty:
+        st.info("Nenhuma candidata hibrida foi gerada na ultima execucao.")
+    else:
+        st.subheader(f"🔄💸 Top {quantidade_exibida} Hibridas")
+        st.caption(
+            "Ativos com equilibrio entre potencial de valorizacao e renda."
+        )
+        exibir_linhas_ranking(
+            ranking_hibridas,
+            quantidade_exibida,
+            criterio="hibrido",
+        )
 
     st.divider()
     st.subheader("🔎 Analise Manual")
     st.caption(
-        "Digite ate dois tickers recebidos em dicas ou pesquisas. "
-        "Os ativos serao avaliados pela mesma regua de swing e dividendos."
+        "Digite ate dois tickers. A analise manual usa a mesma regua visual, "
+        "mas consulta os dados atuais diretamente."
     )
 
     manual_col1, manual_col2 = st.columns(2)
     with manual_col1:
         ticker_manual_1 = st.text_input(
             "Ticker manual 1",
-            placeholder="Ex.: F",
-            key="ticker_manual_1"
+            placeholder="Ex.: PSEC",
+            key="ticker_manual_1",
         ).strip().upper()
     with manual_col2:
         ticker_manual_2 = st.text_input(
             "Ticker manual 2",
-            placeholder="Ex.: AVGO",
-            key="ticker_manual_2"
+            placeholder="Ex.: ARCC",
+            key="ticker_manual_2",
         ).strip().upper()
 
     tickers_manuais = []
@@ -753,7 +891,7 @@ with aba_compras:
                 exibir_card_compra(
                     analise_manual,
                     criterio="manual",
-                    posicao_ranking=None
+                    posicao_ranking=None,
                 )
         except Exception as erro:
             st.warning(f"Nao foi possivel analisar {ticker}: {erro}")
