@@ -418,41 +418,78 @@ def tabela_dividendos_mensais(ticker, historico, quantidade_atual):
 def grafico_ativo_com_tabela(close, ticker, rotulos, por_acao, total_recebido, acumulado):
     fig = make_subplots(
         rows=2, cols=1,
-        row_heights=[0.72, 0.28], vertical_spacing=0.025,
+        row_heights=[0.70, 0.30], vertical_spacing=0.02,
         specs=[[{"type": "xy"}], [{"type": "table"}]]
     )
+
+    # O grafico usa exatamente os mesmos 12 meses da tabela.
+    meses_data = pd.to_datetime(rotulos, format="%b/%Y")
+    inicio_grafico = meses_data[0]
+    fim_grafico = meses_data[-1] + pd.offsets.MonthEnd(1)
+    close_12m = close[(close.index >= inicio_grafico) & (close.index <= fim_grafico)]
+
     fig.add_trace(
         go.Scatter(
-            x=close.index, y=close.values, mode="lines",
-            name=ticker, line=dict(color="#1f77b4", width=2)
-        ), row=1, col=1
+            x=close_12m.index,
+            y=close_12m.values,
+            mode="lines",
+            name=ticker,
+            line=dict(color="#1f77b4", width=2)
+        ),
+        row=1, col=1
     )
 
     valores = [
         ["Dividendo por acao", "Total recebido no mes", "Recebido acumulado"],
         *[
-            [f"${por_acao.iloc[i]:,.3f}", f"${total_recebido.iloc[i]:,.2f}", f"${acumulado.iloc[i]:,.2f}"]
+            [
+                f"${por_acao.iloc[i]:,.3f}",
+                f"${total_recebido.iloc[i]:,.2f}",
+                f"${acumulado.iloc[i]:,.2f}"
+            ]
             for i in range(len(rotulos))
         ]
     ]
+
+    primeira = 1.65
     fig.add_trace(
         go.Table(
-            columnwidth=[1.55] + [1.0] * len(rotulos),
+            columnwidth=[primeira] + [1.0] * len(rotulos),
             header=dict(
                 values=["<b>Dividendos</b>"] + [f"<b>{mes}</b>" for mes in rotulos],
-                fill_color="#f3f5f8", align=["left"] + ["center"] * len(rotulos),
-                height=28, line_color="#d9dee7"
+                fill_color="#f3f5f8",
+                align=["left"] + ["center"] * len(rotulos),
+                height=28,
+                line_color="#d9dee7"
             ),
             cells=dict(
-                values=valores, fill_color=["#f8f9fb"] + ["white"] * len(rotulos),
-                align=["left"] + ["right"] * len(rotulos), height=25,
+                values=valores,
+                fill_color=["#f8f9fb"] + ["white"] * len(rotulos),
+                align=["left"] + ["right"] * len(rotulos),
+                height=25,
                 line_color="#e4e7ec"
             )
-        ), row=2, col=1
+        ),
+        row=2, col=1
     )
+
+    # Reserva no grafico a mesma largura da coluna de descricoes da tabela.
+    inicio_dominio = primeira / (primeira + len(rotulos))
+    fig.update_xaxes(
+        domain=[inicio_dominio, 1.0],
+        range=[inicio_grafico, fim_grafico],
+        tickmode="array",
+        tickvals=meses_data,
+        ticktext=rotulos,
+        row=1,
+        col=1
+    )
+
     fig.update_layout(
-        height=520, showlegend=False, hovermode="x unified",
-        margin=dict(l=10, r=10, t=15, b=5)
+        height=540,
+        showlegend=False,
+        hovermode="x unified",
+        margin=dict(l=8, r=8, t=15, b=5)
     )
     fig.update_yaxes(tickprefix="$", row=1, col=1)
     return fig
@@ -597,7 +634,7 @@ with aba_carteira:
                 st.divider()
                 ticker = posicao["Ticker"]
                 try:
-                    close = serie_close(baixar_precos(ticker), ticker)
+                    close = serie_close(baixar_precos(ticker, periodo="1y"), ticker)
                     if close is None or close.empty:
                         continue
                     x = calcular_indicadores(close)
@@ -616,6 +653,13 @@ with aba_carteira:
                     c1, c2, c3 = st.columns([1.2, 3.2, 1.4])
                     with c1:
                         st.subheader(ticker)
+                        st.write(f"📦 Quantidade: **{posicao['Quantidade']:,.3f}**")
+                        st.write(f"💰 Custo medio: **${posicao['CustoMedio']:,.2f}**")
+                        st.write(f"💵 Atual Fidelity: **${posicao['PrecoFidelity']:,.2f}**")
+                        st.write(f"🌐 Atual online: **${x['atual']:,.2f}**")
+                        st.write(f"📊 Valor atual: **${posicao['ValorAtual']:,.2f}**")
+                        st.write(f"📈 Ganho: **{ganho_pct:+.2f}%**")
+                        st.write(f"💲 Ganho: **${posicao['GanhoDolar']:+,.2f}**")
                         st.write(f"📈 RSI: **{x['rsi']:.2f}**")
                         st.write(f"📍 Posicao: **{x['posicao']:.1f}%**")
                         st.write(f"💸 Yield 12m: **{info_div['yield']:.2f}%**")
