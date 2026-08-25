@@ -1,0 +1,11 @@
+{
+  "status": "success",
+  "updated_at_utc": "2026-08-25 17:08 UTC",
+  "universe_symbols": 12600,
+  "valid_assets_analyzed": 6125,
+  "failed_batches": 0,
+  "top_swing_count": 50,
+  "top_dividend_count": 50,
+  "top_hybrid_count": 50,
+  "duration_seconds": 1027.6
+}
