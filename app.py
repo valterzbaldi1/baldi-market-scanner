@@ -261,132 +261,168 @@ def calcular_sinal_carteira(
 
 def ler_csv_fidelity(arquivo):
 
+    import csv
+    import io
+
     arquivo.seek(0)
 
-    # Lê o arquivo sem assumir que existe um cabeçalho correto.
-    linhas = pd.read_csv(
-        arquivo,
-        header=None,
-        dtype=str,
-        engine="python",
-        on_bad_lines="skip",
-        skip_blank_lines=True
+    conteudo = arquivo.getvalue()
+
+    if isinstance(conteudo, bytes):
+
+        texto = conteudo.decode(
+            "utf-8-sig",
+            errors="ignore"
+        )
+
+    else:
+
+        texto = conteudo
+
+    leitor = csv.reader(
+        io.StringIO(texto)
     )
 
-    linhas = linhas.dropna(
-        how="all"
-    )
+    linhas = list(leitor)
 
-    # Remove colunas totalmente vazias.
-    linhas = linhas.dropna(
-        axis=1,
-        how="all"
-    )
+    linha_cabecalho = None
+    cabecalho = None
 
-    # Esta é a estrutura observada no CSV exportado pela Fidelity:
-    #
-    # Coluna 0  = Account Number
-    # Coluna 1  = Account Name
-    # Coluna 2  = Symbol
-    # Coluna 3  = Description
-    # Coluna 4  = Quantity
-    # Coluna 5  = Last Price
-    # Coluna 6  = Today's Gain/Loss Dollar
-    # Coluna 7  = Current Value
-    # Coluna 8  = Today's Gain/Loss Dollar
-    # Coluna 9  = Today's Gain/Loss Percent
-    # Coluna 10 = Total Gain/Loss Dollar
-    # Coluna 11 = Total Gain/Loss Percent
-    # Coluna 12 = Percent of Account
-    # Coluna 13 = Cost Basis Total
-    # Coluna 14 = Average Cost Basis
-    # Coluna 15 = Type
+    for indice, linha in enumerate(linhas):
 
-    if linhas.shape[1] < 15:
+        linha_limpa = [
+            str(valor).strip()
+            for valor in linha
+        ]
+
+        if "Symbol" in linha_limpa:
+
+            linha_cabecalho = indice
+            cabecalho = linha_limpa
+            break
+
+    if linha_cabecalho is None:
 
         raise ValueError(
-            "O CSV não possui o número esperado de colunas. "
-            f"Foram encontradas {linhas.shape[1]} colunas."
+            "O cabeçalho do CSV da Fidelity "
+            "não foi encontrado."
         )
 
-    resultado = pd.DataFrame({
-        "Ticker": linhas.iloc[:, 2],
-        "Quantidade": linhas.iloc[:, 4],
-        "PrecoFidelity": linhas.iloc[:, 5],
-        "ValorAtual": linhas.iloc[:, 7],
-        "GanhoDolar": linhas.iloc[:, 10],
-        "GanhoPercentual": linhas.iloc[:, 11],
-        "CustoTotal": linhas.iloc[:, 13],
-        "CustoMedio": linhas.iloc[:, 14]
-    })
+    posicoes = []
 
-    # Limpa os tickers.
-    resultado["Ticker"] = (
-        resultado["Ticker"]
-        .astype(str)
-        .str.strip()
-        .str.upper()
+    for linha in linhas[
+        linha_cabecalho + 1:
+    ]:
+
+        if len(linha) < len(cabecalho):
+
+            linha = linha + [
+                ""
+            ] * (
+                len(cabecalho)
+                - len(linha)
+            )
+
+        registro = dict(
+            zip(
+                cabecalho,
+                linha
+            )
+        )
+
+        ticker = str(
+            registro.get(
+                "Symbol",
+                ""
+            )
+        ).strip().upper()
+
+        if ticker in [
+            "",
+            "SPAXX",
+            "SPAXX**",
+            "FCASH",
+            "CASH",
+            "NAN",
+            "NONE"
+        ]:
+
+            continue
+
+        if not ticker.replace(
+            ".",
+            ""
+        ).replace(
+            "-",
+            ""
+        ).isalpha():
+
+            continue
+
+        quantidade = converter_numero(
+            registro.get(
+                "Quantity",
+                0
+            )
+        )
+
+        if quantidade <= 0:
+
+            continue
+
+        posicoes.append({
+            "Ticker": ticker,
+
+            "Quantidade": quantidade,
+
+            "PrecoFidelity": converter_numero(
+                registro.get(
+                    "Last price",
+                    0
+                )
+            ),
+
+            "ValorAtual": converter_numero(
+                registro.get(
+                    "Current value",
+                    0
+                )
+            ),
+
+            "GanhoDolar": converter_numero(
+                registro.get(
+                    "Total gain/loss dollar",
+                    0
+                )
+            ),
+
+            "GanhoPercentual": converter_numero(
+                registro.get(
+                    "Total gain/loss percent",
+                    0
+                )
+            ),
+
+            "CustoTotal": converter_numero(
+                registro.get(
+                    "Cost basis total",
+                    0
+                )
+            ),
+
+            "CustoMedio": converter_numero(
+                registro.get(
+                    "Average cost basis",
+                    0
+                )
+            )
+        })
+
+    resultado = pd.DataFrame(
+        posicoes
     )
 
-    # Remove dinheiro em money market, caixa e linhas legais.
-    tickers_excluidos = [
-        "",
-        "NAN",
-        "NONE",
-        "SPAXX",
-        "SPAXX**",
-        "FCASH",
-        "CASH",
-        "PENDING",
-        "PENDING ACTIVITY",
-        "SYMBOL"
-    ]
-
-    resultado = resultado[
-        ~resultado["Ticker"].isin(
-            tickers_excluidos
-        )
-    ]
-
-    # Mantém somente símbolos válidos, como JEPI, MAIN e O.
-    resultado = resultado[
-        resultado["Ticker"].str.match(
-            r"^[A-Z][A-Z.\-]{0,9}$",
-            na=False
-        )
-    ]
-
-    colunas_numericas = [
-        "Quantidade",
-        "PrecoFidelity",
-        "ValorAtual",
-        "GanhoDolar",
-        "GanhoPercentual",
-        "CustoTotal",
-        "CustoMedio"
-    ]
-
-    for coluna in colunas_numericas:
-
-        resultado[coluna] = (
-            resultado[coluna]
-            .apply(converter_numero)
-        )
-
-    # Remove posições sem quantidade.
-    resultado = resultado[
-        resultado["Quantidade"] > 0
-    ]
-
-    # Evita duplicidade.
-    resultado = resultado.drop_duplicates(
-        subset=["Ticker"],
-        keep="last"
-    )
-
-    return resultado.reset_index(
-        drop=True
-    )
+    return resultado
 def estimar_dividendos(
     ticker,
     quantidade
