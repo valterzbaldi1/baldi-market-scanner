@@ -538,57 +538,225 @@ def avaliar_compra(indicadores, ticker):
 
 
 # ==================================================
+# SCANNER AUTOMATICO E CARDS DE COMPRA
+# ==================================================
+
+UNIVERSO_PILOTO = [
+    "NVDA", "MSFT", "META", "AMZN", "GOOGL", "AVGO", "AMD", "CRM",
+    "JPM", "KO", "PEP", "JNJ", "PG", "VZ", "T", "O", "MAIN", "JEPI", "SCHD"
+]
+
+
+def analisar_ticker_compra(ticker):
+    ticker = ticker.strip().upper()
+    if not ticker:
+        return None
+
+    close = serie_close(baixar_precos(ticker, periodo="1y"), ticker)
+    if close is None or close.empty:
+        return None
+
+    x = calcular_indicadores(close)
+    positivos, alertas, score_valor, score_renda, sinal = avaliar_compra(x, ticker)
+    info_div = dados_dividendos(ticker, x["atual"], 1.0)
+
+    renda_anual_100 = info_div["yield"]
+    renda_mensal_100 = renda_anual_100 / 12
+    quantidade_100 = 100 / x["atual"] if x["atual"] else 0.0
+
+    return {
+        "ticker": ticker,
+        "close": close,
+        "indicadores": x,
+        "positivos": positivos,
+        "alertas": alertas,
+        "score_swing": int(score_valor),
+        "score_renda": int(round(score_renda)),
+        "sinal": sinal,
+        "frequencia": info_div["frequencia"],
+        "yield": info_div["yield"],
+        "renda_anual_100": renda_anual_100,
+        "renda_mensal_100": renda_mensal_100,
+        "quantidade_100": quantidade_100
+    }
+
+
+def exibir_card_compra(analise, criterio, posicao_ranking=None):
+    ticker = analise["ticker"]
+    x = analise["indicadores"]
+
+    st.divider()
+
+    if posicao_ranking is not None:
+        st.markdown(f"### #{posicao_ranking} - {ticker}")
+
+    col1, col2, col3 = st.columns([1.28, 3, 1.5])
+
+    with col1:
+        if posicao_ranking is None:
+            st.subheader(ticker)
+
+        st.write(f"💵 Atual: **${x['atual']:,.2f}**")
+        st.write(f"🏔️ Max 12m: **${x['maxima']:,.2f}**")
+        st.write(f"📉 Min 12m: **${x['minima']:,.2f}**")
+        st.write(f"📊 Media 12m: **${x['media']:,.2f}**")
+        st.write(f"📈 RSI: **{x['rsi']:.2f}**")
+        st.write(f"📍 Posicao: **{x['posicao']:.1f}%**")
+        st.write(f"📉 Dist. Max: **{x['distancia']:+.2f}%**")
+
+        st.markdown("**Estrategias**")
+        st.write(f"🔄 Swing: **{analise['score_swing']}/100**")
+        st.write(f"💸 Dividendos: **{analise['score_renda']}/100**")
+        st.write(f"📆 Frequencia: **{analise['frequencia']}**")
+        st.write(f"💵 Yield 12m: **{analise['yield']:.2f}%**")
+        st.write(f"🧾 $100 compram: **{analise['quantidade_100']:.3f} acoes/cotas**")
+        st.write(f"💰 Renda anual por $100: **${analise['renda_anual_100']:.2f}**")
+        st.write(f"📅 Renda mensal equivalente: **${analise['renda_mensal_100']:.2f}**")
+
+        if criterio == "swing":
+            if analise["score_swing"] >= 70:
+                st.success("🟢 CANDIDATA A SWING")
+            elif analise["score_swing"] >= 45:
+                st.warning("🟨 AGUARDAR CONFIRMACAO")
+            else:
+                st.error("🔴 FRACA PARA SWING")
+        elif criterio == "dividendos":
+            if analise["score_renda"] >= 70:
+                st.success("🟢 CANDIDATA PARA RENDA")
+            elif analise["score_renda"] >= 45:
+                st.warning("🟨 RENDA MODERADA")
+            else:
+                st.error("🔴 FRACA PARA RENDA")
+        else:
+            perfil = "HIBRIDA" if analise["score_swing"] >= 60 and analise["score_renda"] >= 60 else (
+                "SWING" if analise["score_swing"] > analise["score_renda"] else "DIVIDENDOS"
+            )
+            st.info(f"Perfil predominante: **{perfil}**")
+
+        with st.expander("Por que este sinal?"):
+            st.markdown("**Pontos positivos**")
+            if analise["positivos"]:
+                for item in analise["positivos"]:
+                    st.write("✅ " + item)
+            else:
+                st.write("Nenhum fator positivo forte identificado.")
+
+            st.markdown("**Pontos de atencao**")
+            if analise["alertas"]:
+                for item in analise["alertas"]:
+                    st.write("⚠️ " + item)
+            else:
+                st.write("Nenhum alerta relevante identificado.")
+
+            st.caption(
+                "Os scores de swing e dividendos sao independentes. "
+                "A classificacao serve para triagem e nao e uma ordem automatica."
+            )
+
+    with col2:
+        st.line_chart(analise["close"], height=340)
+
+    with col3:
+        mostrar_noticias(ticker)
+
+
+# ==================================================
 # ABAS
 # ==================================================
 
 aba_compras, aba_carteira = st.tabs(["📈 Compras", "💼 Minha Carteira"])
 
 with aba_compras:
-    st.header("📈 Analise de Compras")
-    for ticker in ["NVDA", "MSFT", "META"]:
-        st.divider()
-        try:
-            close = serie_close(baixar_precos(ticker), ticker)
-            if close is None or close.empty:
-                st.warning(f"Historico indisponivel para {ticker}")
+    st.header("📈 Oportunidades de Compra")
+    st.caption(
+        "Versao piloto: o ranking automatico abaixo usa um universo inicial diversificado. "
+        "Depois de validarmos a logica e o layout, ampliaremos o scanner gradualmente."
+    )
+
+    with st.spinner("Analisando candidatas para swing e dividendos..."):
+        analises = []
+        for ticker in UNIVERSO_PILOTO:
+            try:
+                analise = analisar_ticker_compra(ticker)
+                if analise is not None:
+                    analises.append(analise)
+            except Exception:
                 continue
-            x = calcular_indicadores(close)
-            positivos, alertas, score_valor, score_renda, sinal = avaliar_compra(x, ticker)
-            c1, c2, c3 = st.columns([1.15, 3, 1.5])
-            with c1:
-                st.subheader(ticker)
-                st.write(f"💵 Atual: **${x['atual']:,.2f}**")
-                st.write(f"🏔️ Max: **${x['maxima']:,.2f}**")
-                st.write(f"📉 Min: **${x['minima']:,.2f}**")
-                st.write(f"📊 Media: **${x['media']:,.2f}**")
-                st.write(f"📈 RSI: **{x['rsi']:.2f}**")
-                st.write(f"📍 Posicao: **{x['posicao']:.1f}%**")
-                st.write(f"📉 Dist. Max: **{x['distancia']:+.2f}%**")
-                st.write(f"📈 Valorizacao: **{score_valor}/100**")
-                st.write(f"💸 Renda: **{score_renda:.0f}/100**")
-                if sinal == "CANDIDATA A COMPRA":
-                    st.success("🟢 CANDIDATA A COMPRA")
-                elif sinal == "AGUARDAR CONFIRMACAO":
-                    st.warning("🟨 AGUARDAR CONFIRMACAO")
-                else:
-                    st.error("🔴 NAO COMPRAR")
-                with st.expander("Por que este sinal?"):
-                    st.markdown("**Pontos positivos**")
-                    for item in positivos:
-                        st.write("✅ " + item)
-                    if not positivos:
-                        st.write("Nenhum fator positivo forte identificado.")
-                    st.markdown("**Pontos de atencao**")
-                    for item in alertas:
-                        st.write("⚠️ " + item)
-                    if not alertas:
-                        st.write("Nenhum alerta relevante identificado.")
-            with c2:
-                st.line_chart(close, height=300)
-            with c3:
-                mostrar_noticias(ticker)
+
+    if not analises:
+        st.error("Nenhuma candidata pode ser analisada neste momento.")
+    else:
+        top_swing = sorted(
+            analises,
+            key=lambda item: item["score_swing"],
+            reverse=True
+        )[:3]
+
+        tickers_swing = {item["ticker"] for item in top_swing}
+        candidatas_renda = [
+            item for item in analises
+            if item["ticker"] not in tickers_swing
+        ]
+        top_dividendos = sorted(
+            candidatas_renda,
+            key=lambda item: item["score_renda"],
+            reverse=True
+        )[:3]
+
+        st.subheader("🔄 Top 3 para Swing Trade")
+        st.caption(
+            "Ordenadas pelo potencial de valorizacao, posicao historica, desconto frente a maxima e RSI."
+        )
+        for ranking, analise in enumerate(top_swing, start=1):
+            exibir_card_compra(analise, criterio="swing", posicao_ranking=ranking)
+
+        st.subheader("💸 Top 3 para Dividendos")
+        st.caption(
+            "Ordenadas por yield de 12 meses e capacidade estimada de gerar renda. "
+            "As candidatas do Top Swing foram excluidas desta lista para exibir seis sugestoes distintas."
+        )
+        for ranking, analise in enumerate(top_dividendos, start=1):
+            exibir_card_compra(analise, criterio="dividendos", posicao_ranking=ranking)
+
+    st.divider()
+    st.subheader("🔎 Analise Manual")
+    st.caption(
+        "Digite ate dois tickers recebidos em dicas ou pesquisas. "
+        "Os ativos serao avaliados pela mesma regua de swing e dividendos."
+    )
+
+    manual_col1, manual_col2 = st.columns(2)
+    with manual_col1:
+        ticker_manual_1 = st.text_input(
+            "Ticker manual 1",
+            placeholder="Ex.: F",
+            key="ticker_manual_1"
+        ).strip().upper()
+    with manual_col2:
+        ticker_manual_2 = st.text_input(
+            "Ticker manual 2",
+            placeholder="Ex.: AVGO",
+            key="ticker_manual_2"
+        ).strip().upper()
+
+    tickers_manuais = []
+    for ticker in [ticker_manual_1, ticker_manual_2]:
+        if ticker and ticker not in tickers_manuais:
+            tickers_manuais.append(ticker)
+
+    for ticker in tickers_manuais:
+        try:
+            analise_manual = analisar_ticker_compra(ticker)
+            if analise_manual is None:
+                st.warning(f"Nao foi possivel encontrar historico para {ticker}.")
+            else:
+                exibir_card_compra(
+                    analise_manual,
+                    criterio="manual",
+                    posicao_ranking=None
+                )
         except Exception as erro:
-            st.error(f"Erro carregando {ticker}: {erro}")
+            st.warning(f"Nao foi possivel analisar {ticker}: {erro}")
 
 with aba_carteira:
     st.header("💼 Minha Carteira")
