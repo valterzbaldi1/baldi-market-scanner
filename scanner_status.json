@@ -1,39 +1,39 @@
 {
   "status": "success",
-  "updated_at_utc": "2026-08-25 17:34 UTC",
-  "universe_symbols": 11548,
-  "valid_assets_analyzed": 4780,
-  "dividend_candidates": 2225,
-  "hybrid_candidates": 649,
+  "updated_at_utc": "2026-08-26 12:09 UTC",
+  "universe_symbols": 11553,
+  "valid_assets_analyzed": 4802,
+  "dividend_candidates": 2236,
+  "hybrid_candidates": 630,
   "failed_batches": 0,
   "top_swing_count": 50,
   "top_dividend_count": 50,
   "top_hybrid_count": 50,
   "tracked_assets": {
     "MAIN": {
-      "score_swing": 54.2,
-      "score_dividendos": 71.9,
-      "score_hibrido": 61.3,
-      "yield_12m": 7.34,
+      "score_swing": 55.1,
+      "score_dividendos": 72.1,
+      "score_hibrido": 61.9,
+      "yield_12m": 7.36,
       "asset_type": "Acao/BDC",
-      "rank_dividendos": 88
+      "rank_dividendos": 86
     },
     "O": {
-      "score_swing": 40.3,
-      "score_dividendos": 56.0,
-      "score_hibrido": 46.6,
-      "yield_12m": 5.17,
+      "score_swing": 39.7,
+      "score_dividendos": 55.9,
+      "score_hibrido": 46.2,
+      "yield_12m": 5.16,
       "asset_type": "REIT",
-      "rank_dividendos": 492
+      "rank_dividendos": 497
     },
     "JEPI": {
-      "score_swing": 38.8,
+      "score_swing": 38.4,
       "score_dividendos": 71.8,
-      "score_hibrido": 52.0,
+      "score_hibrido": 51.8,
       "yield_12m": 7.88,
       "asset_type": "ETF",
-      "rank_dividendos": 90
+      "rank_dividendos": 89
     }
   },
-  "duration_seconds": 825.8
+  "duration_seconds": 789.4
 }
